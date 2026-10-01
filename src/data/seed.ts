@@ -331,53 +331,57 @@ export function seedStore() {
         });
       });
     }
-    // One shipment per month, sized from the order's total.
+    // One order = one shipment in one month. Approved customers are on a running contract, so they get
+    // separate orders spread across their period; every other flow is a single order for its first month.
     const perMonth = Math.round((o.totalMt / months.length) * 10) / 10;
-    const shipments = months.map((month) => ({ month, quantityMt: perMonth }));
-    const needs = shipmentTonnes(shipments);
-    const state = loadCapacityState();
-    const input: OrderInput = {
-      customerId,
-      newCustomerName: "",
-      customerCountry: o.country,
-      contactPerson: o.contact,
-      customerType: "REPEAT",
-      bdOwnerId: ownerId,
-      destinationCountry: o.country,
-      destinationPort: o.city,
-      incoterm: o.incoterm,
-      freightBasis: o.freight,
-      gbGrade: o.grade,
-      beanOrigin: o.origin,
-      gbPriceClosed: !!o.gbClosed,
-      gbClosedPrice: o.gbClosed ?? null,
-      ...TERMS[o.terms],
-      currency: "INR",
-      specNotes: o.notes ?? "",
-      spillOverride: "",
-      shipments,
-      // Split each month across the lines that have room, the same way the order guide does.
-      lines: planAvailability(sku.productType, months, needs).perMonth.flatMap((m) => {
-        const split = m.proposal.length ? m.proposal.map((p) => ({ ...p })) : [{ lineId: suggestLine(state, sku.productType, m.month)!, quantityMt: 0 }];
-        split[0].quantityMt = Math.round((split[0].quantityMt + m.short) * 10) / 10;
-        return split.map((p) => ({ skuId: sku.id, chicoryPct: o.chicoryPct ?? 0, month: m.month, quantityMt: p.quantityMt, pricePerKg: o.price, lineId: p.lineId }));
-      }),
-    };
-    const asOf = o.flow === "committed" ? monthsAgo : undefined;
-    if (evaluateOrder(input, undefined, asOf).lines.some((l) => l.spill > 0)) {
-      input.spillOverride = "Priority customer, requesting COO to rebalance the line mix for this month.";
-    }
-    const bd: Viewer = { id: ownerId, name: o.owner, role: "BD_EXEC" };
-    const id = saveOrder(input, bd, o.flow === "draft" ? "draft" : "submit", undefined, asOf);
-    const order = st.orders.find((x) => x.id === id)!;
-    if (o.customer === "Cape Coffee Traders") order.customerType = "NEW";
+    const picks = o.flow === "committed" ? [...new Set([months[0], months[Math.floor((months.length - 1) / 2)], months[months.length - 1]])] : [months[0]];
+    for (const shipMonth of picks) {
+      const shipments = [{ month: shipMonth, quantityMt: perMonth }];
+      const needs = shipmentTonnes(shipments);
+      const state = loadCapacityState();
+      const input: OrderInput = {
+        customerId,
+        newCustomerName: "",
+        customerCountry: o.country,
+        contactPerson: o.contact,
+        customerType: "REPEAT",
+        bdOwnerId: ownerId,
+        destinationCountry: o.country,
+        destinationPort: o.city,
+        incoterm: o.incoterm,
+        freightBasis: o.freight,
+        gbGrade: o.grade,
+        beanOrigin: o.origin,
+        gbPriceClosed: !!o.gbClosed,
+        gbClosedPrice: o.gbClosed ?? null,
+        ...TERMS[o.terms],
+        currency: "INR",
+        specNotes: o.notes ?? "",
+        spillOverride: "",
+        shipments,
+        // Split each month across the lines that have room, the same way the order guide does.
+        lines: planAvailability(sku.productType, [shipMonth], needs).perMonth.flatMap((m) => {
+          const split = m.proposal.length ? m.proposal.map((p) => ({ ...p })) : [{ lineId: suggestLine(state, sku.productType, m.month)!, quantityMt: 0 }];
+          split[0].quantityMt = Math.round((split[0].quantityMt + m.short) * 10) / 10;
+          return split.map((p) => ({ skuId: sku.id, chicoryPct: o.chicoryPct ?? 0, month: m.month, quantityMt: p.quantityMt, pricePerKg: o.price, lineId: p.lineId }));
+        }),
+      };
+      const asOf = o.flow === "committed" ? monthsAgo : undefined;
+      if (evaluateOrder(input, undefined, asOf).lines.some((l) => l.spill > 0)) {
+        input.spillOverride = "Priority customer, requesting COO to rebalance the line mix for this month.";
+      }
+      const bd: Viewer = { id: ownerId, name: o.owner, role: "BD_EXEC" };
+      const id = saveOrder(input, bd, o.flow === "draft" ? "draft" : "submit", undefined, asOf);
+      const order = st.orders.find((x) => x.id === id)!;
+      if (o.customer === "Cape Coffee Traders") order.customerType = "NEW";
 
-    const f = o.flow;
-    if (f === "draft" || f === "pending") continue;
-    if (f === "committed") for (const r of ["CFO", "COO"] as const) decide(id, r, "APPROVED", "", viewerFor(r));
-    else if ("approve" in f) for (const r of f.approve) decide(id, r, "APPROVED", "", viewerFor(r));
-    else if ("sendBack" in f) decide(id, f.sendBack, "SENT_BACK", f.comment, viewerFor(f.sendBack));
-    else decide(id, f.reject, "REJECTED", f.comment, viewerFor(f.reject));
+      const f = o.flow;
+      if (f === "draft" || f === "pending") continue;
+      if (f === "committed") for (const r of ["CFO", "COO"] as const) decide(id, r, "APPROVED", "", viewerFor(r));
+      else if ("approve" in f) for (const r of f.approve) decide(id, r, "APPROVED", "", viewerFor(r));
+      else if ("sendBack" in f) decide(id, f.sendBack, "SENT_BACK", f.comment, viewerFor(f.sendBack));
+      else decide(id, f.reject, "REJECTED", f.comment, viewerFor(f.reject));
+    }
   }
 
   // Stock in the warehouse and purchases already on the way.

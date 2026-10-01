@@ -166,7 +166,7 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
                 <th className={tbl.th}>Salesperson</th>
                 <th className={tbl.th}>Product</th>
                 <th className={tbl.thR}>Tonnes</th>
-                <th className={tbl.th}>Ships</th>
+                <th className={tbl.th}>Ship month</th>
                 <th className={tbl.thR}>Value</th>
                 <th className={tbl.thR}>Profit</th>
                 <th className={tbl.th}>Approvals</th>
@@ -188,10 +188,7 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
                     <td className={cx(tbl.td, "text-stone-600")}>{v.owner?.name}</td>
                     <td className={tbl.td}>{first ? productLabel(first.sku, first.chicoryPct) : "–"}</td>
                     <td className={tbl.tdR}>{v.totalMt.toLocaleString("en-IN")}</td>
-                    <td className={cx(tbl.td, "whitespace-nowrap")}>
-                      {monthLabel(v.firstMonth)}
-                      {v.lastMonth !== v.firstMonth && ` – ${monthLabel(v.lastMonth)}`}
-                    </td>
+                    <td className={cx(tbl.td, "whitespace-nowrap")}>{monthLabel(v.order.shipments?.[0]?.month ?? v.firstMonth)}</td>
                     <td className={tbl.tdR}>{v.commercials ? formatInr(v.margin.revenue) : <span className="text-stone-400">hidden</span>}</td>
                     <td className={cx(tbl.tdR, "font-semibold", v.commercials && (v.margin.marginPct >= v.margin.targetPct ? "text-emerald-700" : "text-red-700"))}>{v.commercials ? `${v.margin.marginPct.toFixed(1)}%` : "–"}</td>
                     <td className={tbl.td}>
@@ -291,7 +288,7 @@ function FeasibilityCell({ f, beanFixed, orderId }: { f: Feasibility; beanFixed:
     <div className="space-y-0.5 text-[12px]">
       <div className={cx("font-semibold", f.verdict === "ok" ? "text-emerald-700" : f.verdict === "buy" ? "text-stone-900" : "text-red-700")}>{f.verdict === "ok" ? "✓ Feasible" : f.verdict === "buy" ? "Feasible if we buy" : "✕ Not feasible"}</div>
       <div className="text-stone-600">
-        Line: {f.line.ok ? <span className="text-emerald-700">room in every ship month</span> : <span className="text-red-700">short {f.line.short.map((x) => `${x.short} t in ${monthLabel(x.month)}`).join(", ")}</span>}
+        Line: {f.line.ok ? <span className="text-emerald-700">room in the ship month</span> : <span className="text-red-700">short {f.line.short.map((x) => `${x.short} t in ${monthLabel(x.month)}`).join(", ")}</span>}
       </div>
       <div className="text-stone-600">
         Stock:{" "}

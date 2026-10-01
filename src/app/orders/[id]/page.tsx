@@ -66,7 +66,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
           <thead>
             <tr>
               <th className={tbl.th}>Product</th>
-              <th className={tbl.th}>Shipments</th>
+              <th className={tbl.th}>Ship month</th>
               <th className={tbl.thR}>Tonnes</th>
               <th className={tbl.thR}>Value</th>
               <th className={tbl.thR}>Profit</th>
@@ -78,7 +78,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
           <tbody>
             <tr>
               <td className={tbl.td}>{productName}</td>
-              <td className={tbl.td}>{order.shipments?.length ? order.shipments.map((x) => `${x.quantityMt.toLocaleString("en-IN")} t ${monthLabel(x.month)}`).join(" · ") : `${monthLabel(data.firstMonth)} – ${monthLabel(data.lastMonth)}`}</td>
+              <td className={tbl.td}>{monthLabel(order.shipments?.[0]?.month ?? data.firstMonth)}</td>
               <td className={tbl.tdR}>{data.totalMt.toLocaleString("en-IN")}</td>
               <td className={tbl.tdR}>{commercials ? formatInr(margin.revenue) : "–"}</td>
               <td className={cx(tbl.tdR, "font-semibold", commercials && (margin.marginPct >= margin.targetPct ? "text-emerald-700" : "text-red-700"))}>{commercials ? `${margin.marginPct.toFixed(1)}%` : "–"}</td>
@@ -115,7 +115,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
               <tr>
                 <td className={cx(tbl.td, "w-40 bg-stone-50 text-stone-500")}>Line space</td>
                 <td className={cx(tbl.td, feas.line.ok ? "text-emerald-700" : "text-red-700")}>
-                  {feas.line.ok ? "Room on a line that makes this product in every ship month" : feas.line.short.map((x) => `${x.short} t short in ${monthLabel(x.month)}`).join(" · ")}
+                  {feas.line.ok ? "Room on a line that makes this product in the ship month" : feas.line.short.map((x) => `${x.short} t short in ${monthLabel(x.month)}`).join(" · ")}
                 </td>
               </tr>
               <tr>
@@ -301,7 +301,7 @@ function CooCheck({ feas }: { feas: Feasibility }) {
   return (
     <div className="space-y-5">
       <section>
-        <div className={eyebrow}>1 · Line space in each ship month</div>
+        <div className={eyebrow}>1 · Line space in the ship month</div>
         <div className="overflow-x-auto border border-stone-300 bg-white">
           <table className="tabular w-full min-w-[720px] text-[13px]">
             <thead>

@@ -281,7 +281,7 @@ export function OrderWizard({
   const live = status === "PENDING_APPROVAL" || status === "COMMITTED";
 
   const sku = skus.find((s) => s.productType === v.productType && s.blend === v.blend && s.packFormat === v.packFormat);
-  // An order ships in lots: tonnes per ship month.
+  // One order = one shipment: a ship month and tonnes (kept as a one-item list).
   const shipments = useMemo(() => v.shipments.filter((x) => x.quantityMt > 0 && x.month), [v.shipments]);
   const needs = useMemo(() => shipmentTonnes(shipments), [shipments]);
   const orderMonths = Object.keys(needs).sort();
@@ -512,67 +512,20 @@ export function OrderWizard({
                     ))}
                   </select>
                 </Pick>
+                <Pick label="Ship month">
+                  <select value={v.shipments[0]?.month ?? months[0]} onChange={(e) => setShipment(0, { month: e.target.value })} className={field}>
+                    {months.map((m) => (
+                      <option key={m} value={m}>
+                        {monthLabel(m)}
+                      </option>
+                    ))}
+                  </select>
+                </Pick>
+                <Pick label="Quantity (t)">
+                  <input type="number" min="0" step="0.5" value={v.shipments[0]?.quantityMt || ""} placeholder="20" onChange={(e) => setShipment(0, { quantityMt: Math.max(0, Number(e.target.value) || 0) })} className={cx(field, "font-semibold")} />
+                </Pick>
               </div>
 
-              <div className="border border-stone-300">
-                <table className="tabular w-full text-[13px]">
-                  <thead>
-                    <tr>
-                      <th className={cx(tblTh)}>Ship month</th>
-                      <th className={cx(tblTh, "text-right")}>Quantity (t)</th>
-                      <th className={tblTh} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {v.shipments.map((sh, i) => (
-                      <tr key={i}>
-                        <td className="px-2 py-1">
-                          <select value={sh.month} onChange={(e) => setShipment(i, { month: e.target.value })} className={cx(field, "mt-0 w-32")} aria-label="Ship month">
-                            {months.map((m) => (
-                              <option key={m} value={m}>
-                                {monthLabel(m)}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-2 py-1 text-right">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            value={sh.quantityMt || ""}
-                            placeholder="0"
-                            onChange={(e) => setShipment(i, { quantityMt: Math.max(0, Number(e.target.value) || 0) })}
-                            className={cx(field, "mt-0 w-28 text-right font-semibold")}
-                            aria-label="Tonnes"
-                          />
-                        </td>
-                        <td className="px-2 py-1 text-right">
-                          {v.shipments.length > 1 && (
-                            <button type="button" onClick={() => setV((x) => ({ ...x, shipments: x.shipments.filter((_, k) => k !== i), manual: null }))} className="text-[12px] text-stone-400 hover:text-red-700" aria-label="Remove shipment">
-                              ✕
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    <tr className="bg-stone-50 font-semibold">
-                      <td className="px-2 py-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setV((x) => ({ ...x, shipments: [...x.shipments, { month: addMonths(x.shipments.at(-1)?.month ?? months[0], 1), quantityMt: x.shipments.at(-1)?.quantityMt ?? 0 }] }))}
-                          className="text-[12px] font-medium text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-brand-600"
-                        >
-                          + Add a shipment
-                        </button>
-                      </td>
-                      <td className="px-2 py-1.5 text-right">{totalT ? `Total ${tonnes(totalT)}` : "–"}</td>
-                      <td />
-                    </tr>
-                  </tbody>
-                </table>
-                <p className="border-t border-stone-200 px-2 py-1 text-[11px] text-stone-500">Add one row per shipment. Each shipment is made in its ship month.</p>
-              </div>
               {v.productType && makeable(v.productType) && !sku && <p className="border border-amber-300 bg-amber-50 px-3 py-1.5 text-[13px] text-amber-900">Not in the product list, pick another recipe or packing.</p>}
 
               {v.productType && !makeable(v.productType) ? (
@@ -859,8 +812,8 @@ export function OrderWizard({
                       step: 0,
                       rows: [
                         ["Product", sku ? productLabel(sku, v.blend === "CHICORY" ? v.chicoryPct : 0) : ""],
-                        ["Shipments", shipments.length ? shipments.map((x) => `${tonnes(x.quantityMt)} ${monthLabel(x.month)}`).join(", ") : ""],
-                        ["Total", totalT ? tonnes(totalT) : ""],
+                        ["Ship month", shipments[0] ? monthLabel(shipments[0].month) : ""],
+                        ["Quantity", totalT ? tonnes(totalT) : ""],
                         ["Total", totalT ? tonnes(totalT) : ""],
                       ],
                     },
@@ -993,7 +946,6 @@ export function OrderWizard({
   );
 }
 
-const tblTh = "px-2 py-1.5 text-left font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-700";
 
 function monthDiff(a: string, b: string) {
   const [ya, ma] = a.split("-").map(Number);
@@ -1221,7 +1173,7 @@ function Summary({
   const m = preview?.margin;
   const rows: [string, React.ReactNode, string?][] = [
     ["Product", sku ?? "–"],
-    ["Quantity", totalT ? `${tonnes(totalT)} · ${months.length} shipment month${months.length === 1 ? "" : "s"}` : "–"],
+    ["Quantity", totalT ? `${tonnes(totalT)} · ships ${months[0] ? monthLabel(months[0]) : "–"}` : "–"],
     ["Customer", customer || "–"],
     ["Price", price ? `${currency === "USD" ? "$" : "₹"}${price.toLocaleString("en-IN")}/kg` : "–"],
     ["Value", m?.revenue ? formatInr(m.revenue) : "–"],
