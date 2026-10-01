@@ -1,26 +1,115 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* devx Doctrine tokens. Ink on paper, hairline rules, one blue accent, sharp corners, no shadows. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-sans: var(--font-display);
+  --font-serif: var(--font-editorial);
+  --font-mono: var(--font-code);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Accent (#1E6FFF) is the only colour besides ink on paper. */
+  --color-brand-50: #e8f0ff;
+  --color-brand-100: #e8f0ff;
+  --color-brand-200: #c7d9ff;
+  --color-brand-500: #1e6fff;
+  --color-brand-600: #1e6fff;
+  --color-brand-700: #1759d6;
+  --color-brand-900: #0a0a0a;
+
+  /* Neutrals: paper, rules, muted, ink. */
+  --color-stone-50: #fafaf8;
+  --color-stone-100: #f4f4f1;
+  --color-stone-200: #f0f0f0;
+  --color-stone-300: #e5e5e5;
+  --color-stone-400: #8a8f96;
+  --color-stone-500: #5c6066;
+  --color-stone-600: #5c6066;
+  --color-stone-700: #1a1a1a;
+  --color-stone-800: #1a1a1a;
+  --color-stone-900: #0a0a0a;
+
+  /* OK / Warn only. Soft tints stay near-paper. */
+  --color-emerald-50: #f3f8f5;
+  --color-emerald-100: #e6f2ec;
+  --color-emerald-200: #cfe5da;
+  --color-emerald-300: #cfe5da;
+  --color-emerald-500: #0a7c53;
+  --color-emerald-600: #0a7c53;
+  --color-emerald-700: #0a7c53;
+  --color-emerald-800: #0a7c53;
+  --color-red-50: #fbf3f2;
+  --color-red-100: #f6e4e2;
+  --color-red-200: #eccbc7;
+  --color-red-300: #eccbc7;
+  --color-red-400: #c0392b;
+  --color-red-500: #c0392b;
+  --color-red-600: #c0392b;
+  --color-red-700: #c0392b;
+  --color-red-800: #c0392b;
+  --color-red-900: #c0392b;
+
+  /* "Waiting / attention" is not a brand colour: render it as ink on paper-3. */
+  --color-amber-50: #f4f4f1;
+  --color-amber-100: #f4f4f1;
+  --color-amber-200: #e5e5e5;
+  --color-amber-300: #e5e5e5;
+  --color-amber-400: #1a1a1a;
+  --color-amber-500: #1a1a1a;
+  --color-amber-700: #1a1a1a;
+  --color-amber-800: #1a1a1a;
+  --color-amber-900: #1a1a1a;
+
+  /* Info / sent back use the accent; secondary series use muted ink (no teal, no purple). */
+  --color-sky-50: #e8f0ff;
+  --color-sky-100: #e8f0ff;
+  --color-sky-200: #c7d9ff;
+  --color-sky-300: #c7d9ff;
+  --color-sky-600: #1e6fff;
+  --color-sky-700: #1e6fff;
+  --color-sky-800: #1759d6;
+  --color-sky-900: #1759d6;
+  --color-violet-100: #f4f4f1;
+  --color-violet-300: #e5e5e5;
+  --color-violet-600: #8a8f96;
+  --color-violet-900: #5c6066;
+
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #ffffff;
+  color: #0a0a0a;
+  font-feature-settings: "ss01", "cv11", "tnum";
+  text-rendering: optimizeLegibility;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Every table in the tool is a bordered grid. Utilities (e.g. border-l-2) still win over this base rule. */
+@layer base {
+  main table {
+    border-collapse: collapse;
+  }
+  main th,
+  main td {
+    border: 1px solid var(--color-stone-200);
+  }
+  main thead th {
+    background: var(--color-stone-50);
+    font-family: var(--font-mono);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+  }
+  main em {
+    font-family: var(--font-serif);
+  }
 }
