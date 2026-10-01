@@ -19,11 +19,11 @@ export default async function SummaryPage({ searchParams }: PageProps<"/summary"
     );
   }
   const viewer = await getViewer();
-  if (!can(viewer.role, ["CEO", "CFO", "COO", "BD_HEAD", "ADMIN"])) {
+  if (!can(viewer.role, ["CFO", "COO", "BD_HEAD", "ADMIN"])) {
     return (
       <>
         <PageHeader title="Leadership summary" />
-        <Empty>The leadership summary is for the CEO, CFO, COO and sales head. Switch the &ldquo;Viewing as&rdquo; user to see it.</Empty>
+        <Empty>The leadership summary is for the CFO, COO and sales head. Switch the &ldquo;Viewing as&rdquo; user to see it.</Empty>
       </>
     );
   }

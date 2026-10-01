@@ -2,7 +2,7 @@ import Link from "next/link";
 import { QuickDecision } from "@/components/approval-actions";
 import { ExportButton } from "@/components/export-button";
 import { ButtonLink, cx, Empty, PageHeader, Pager, StatusBadge, Tabs, tbl } from "@/components/ui";
-import { can, formatInr, monthLabel, ORDER_STATUS, productLabel, type OrderStatus } from "@/lib/domain";
+import { can, formatInr, monthLabel, ORDER_STATUS, productLabel, type OrderStatus, containerSummary } from "@/lib/domain";
 import { shortages } from "@/lib/inventory";
 import { Sellable } from "@/components/sellable";
 import { loadCapacityState, packLoadAt, planHorizon } from "@/lib/capacity";
@@ -164,8 +164,9 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
                 <th className={tbl.th}>Customer</th>
                 <th className={tbl.th}>Salesperson</th>
                 <th className={tbl.th}>Product</th>
+                <th className={tbl.th}>Containers</th>
                 <th className={tbl.thR}>Tonnes</th>
-                <th className={tbl.th}>Months</th>
+                <th className={tbl.th}>Ships</th>
                 <th className={tbl.thR}>Value</th>
                 <th className={tbl.thR}>Profit</th>
                 <th className={tbl.th}>Approvals</th>
@@ -186,6 +187,7 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
                     <td className={cx(tbl.td, "font-medium text-stone-900")}>{v.customer.name}</td>
                     <td className={cx(tbl.td, "text-stone-600")}>{v.owner?.name}</td>
                     <td className={tbl.td}>{first ? productLabel(first.sku, first.chicoryPct) : "–"}</td>
+                    <td className={cx(tbl.td, "whitespace-nowrap font-medium")}>{containerSummary(v.order.shipments)}</td>
                     <td className={tbl.tdR}>{v.totalMt.toLocaleString("en-IN")}</td>
                     <td className={cx(tbl.td, "whitespace-nowrap")}>
                       {monthLabel(v.firstMonth)}

@@ -4,6 +4,7 @@ import { addMonths, monthLabel, planningStart, productLabel, PRODUCT_TYPES, type
 import { inventoryProjection } from "./inventory";
 import { requirementsFor } from "./procurement";
 import { loadSettings, type Settings } from "./settings";
+import { lineMarginFor } from "./order-margin";
 import { withShare } from "./workflow";
 
 // One thing for the planner to place: a new order's slot, or the extra tonnes in an overbooked month.
@@ -19,6 +20,8 @@ export type Suggestion = {
   moveMt: number; // tonnes the suggestion moves (less than slotMt when only the overbooked part needs to go)
   deliveryMonth: string;
   current: { lineId: number; line: string; month: string; problem: string | null };
+  marginPct: number | null;
+  belowMin: boolean;
   best: { lineId: number; line: string; month: string; free: number; materialsOk: boolean; partial: boolean } | null;
   keep: boolean;
   reason: string;
@@ -66,6 +69,7 @@ function suggestFor({ r, qty, overbooked }: Target, state: CapacityState, projec
     ol.chicoryPct,
   );
   const delivery = ol.month;
+  const margin = lineMarginFor(ol, order, s);
   const lineCode = (id: number) => state.lines.find((l) => l.id === id)?.code ?? "";
 
   // Materials: the current month is fine if nothing is short there; another month needs spare stock for these tonnes.
@@ -161,6 +165,8 @@ function suggestFor({ r, qty, overbooked }: Target, state: CapacityState, projec
     moveMt,
     deliveryMonth: delivery,
     current: { lineId: r.lineId, line: lineCode(r.lineId), month: r.month, problem },
+    marginPct: margin?.marginPct ?? null,
+    belowMin: margin ? margin.marginPct < s["margin.target_pct"] : false,
     best,
     keep,
     reason,

@@ -2,7 +2,7 @@ import type { WizardState } from "@/components/order-wizard";
 import { store } from "@/data/store";
 import type { Order } from "@/data/types";
 import { loadLines, planHorizon } from "./capacity";
-import { addMonths, ORIGINS, planningStart } from "./domain";
+import { addMonths, containerTonnes, ORIGINS, planningStart } from "./domain";
 import { activeSkus, bdUsers, customers } from "./queries";
 import { loadSettings } from "./settings";
 import type { Viewer } from "./workflow";
@@ -30,20 +30,18 @@ export function blankWizard(viewer: Viewer, prefill: { product?: string; from?: 
     blend: prefill.blend && ["PURE", "CHICORY"].includes(prefill.blend) ? prefill.blend : "PURE",
     packFormat: prefill.pack && ["BULK", "GLASS", "CAN"].includes(prefill.pack) ? prefill.pack : "BULK",
     chicoryPct: 30,
-    qtyPerMonth: 0,
-    fromMonth: from,
-    toMonth: addMonths(from, 2),
+    shipments: [{ month: from, size: "40", containers: prefill.product ? 1 : 0 }],
     pricePerKg: 0,
     manual: null,
     customerId: null,
     newCustomerName: "",
-    customerCountry: "India",
+    customerCountry: "",
     contactPerson: "",
     customerType: "NEW",
     bdOwnerId: viewer.role === "BD_EXEC" && viewer.id ? viewer.id : 0,
-    destinationCountry: "India",
+    destinationCountry: "",
     destinationPort: "",
-    incoterm: "DAP",
+    incoterm: "CIF",
     freightBasis: "SELLER",
     gbGrade: "",
     beanOrigin: "",
@@ -52,7 +50,7 @@ export function blankWizard(viewer: Viewer, prefill: { product?: string; from?: 
     advancePct: 0,
     creditDays: 30,
     paymentMode: "Open account",
-    currency: "INR",
+    currency: "USD",
     specNotes: "",
     spillOverride: "",
   };
@@ -66,15 +64,14 @@ export function wizardFromOrder(order: Order): WizardState {
   const months = [...new Set(lines.map((l) => l.month))];
   const manual: Record<string, Record<number, number>> = {};
   for (const l of lines) manual[l.month] = { ...(manual[l.month] ?? {}), [l.lineId]: (manual[l.month]?.[l.lineId] ?? 0) + l.quantityMt };
-  const total = lines.reduce((a, l) => a + l.quantityMt, 0);
   return {
     productType: sku?.productType ?? "",
     blend: sku?.blend ?? "PURE",
     packFormat: sku?.packFormat ?? "BULK",
     chicoryPct: lines[0]?.chicoryPct || 30,
-    qtyPerMonth: months.length ? Math.round((total / months.length) * 10) / 10 : 0,
-    fromMonth: months[0] ?? addMonths(planningStart(), 3),
-    toMonth: months.at(-1) ?? addMonths(planningStart(), 5),
+    shipments: order.shipments?.length
+      ? order.shipments
+      : months.map((m) => ({ month: m, size: "40" as const, containers: Math.max(1, Math.round(lines.filter((l) => l.month === m).reduce((a, l) => a + l.quantityMt, 0) / containerTonnes(loadSettings(), sku?.packFormat ?? "BULK", "40"))) })),
     pricePerKg: lines[0]?.pricePerKg ?? 0,
     manual,
     customerId: order.customerId,

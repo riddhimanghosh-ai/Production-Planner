@@ -22,7 +22,7 @@ export default function DemoPage() {
       viewer: id("Rohan Mehta"),
       where: "New order · Check availability",
       href: "/orders/new",
-      show: "Pick Agglomerated, 40 t a month, Feb to Apr. The lines are full; it suggests earlier months.",
+      show: "Pick Agglomerated and add shipments of 2 × 40 ft containers for Feb, Mar and Apr. The lines are full; it suggests earlier months.",
       point: "Availability is checked first, live against the calendar.",
     },
     {
@@ -40,10 +40,10 @@ export default function DemoPage() {
       viewer: id("", "CFO"),
       where: "Orders · Approvals",
       href: "/orders?tab=approvals",
-      show: "Konkan Brew Co. at 16.5% margin, below the 18% minimum. Send it back with a comment.",
+      show: "Seoul Beverage Corp at 16.5% margin, below the 18% minimum. Send it back with a comment.",
       point: "The CFO sees margin and payment terms in one row.",
     },
-    { n: "05", who: "COO", viewer: id("", "COO"), where: "Orders · Approvals", href: "/orders?tab=approvals", show: "Himalaya Beverage: line space and materials checks. Approve it.", point: "Both must approve before the factory time is locked." },
+    { n: "05", who: "COO", viewer: id("", "COO"), where: "Orders · Approvals", href: "/orders?tab=approvals", show: "Ankara Gıda: line space and materials checks. Approve it.", point: "Both must approve before the factory time is locked." },
     {
       n: "06",
       who: "Production planner",

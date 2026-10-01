@@ -14,7 +14,7 @@ const NAV = [
   { href: "/margins", label: "Profit & costs", step: "", also: [] },
   { href: "/summary", label: "Leadership summary", step: "", also: [], locked: true },
   { href: "/master", label: "Settings", step: "", also: [] },
-  { href: "/sap", label: "SAP integration", step: "", also: [] },
+  { href: "/d365", label: "D365 integration", step: "", also: [] },
   { href: "/demo", label: "Demo guide", step: "", also: [] },
 ];
 

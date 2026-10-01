@@ -35,6 +35,12 @@ export const DEFAULT_SETTINGS: SettingDef[] = [
 
   { key: "pack_capacity.GLASS", value: 30, label: "Glass filling capacity", unit: "MT/month", grp: "Planning" },
   { key: "pack_capacity.CAN", value: 30, label: "Can filling capacity", unit: "MT/month", grp: "Planning" },
+  { key: "container.BULK.20", value: 10, label: "Tonnes in a 20 ft container, bulk bags", unit: "t", grp: "Planning" },
+  { key: "container.BULK.40", value: 20, label: "Tonnes in a 40 ft container, bulk bags", unit: "t", grp: "Planning" },
+  { key: "container.GLASS.20", value: 8, label: "Tonnes in a 20 ft container, glass jars", unit: "t", grp: "Planning" },
+  { key: "container.GLASS.40", value: 16, label: "Tonnes in a 40 ft container, glass jars", unit: "t", grp: "Planning" },
+  { key: "container.CAN.20", value: 9, label: "Tonnes in a 20 ft container, cans", unit: "t", grp: "Planning" },
+  { key: "container.CAN.40", value: 18, label: "Tonnes in a 40 ft container, cans", unit: "t", grp: "Planning" },
 
   { key: "lead.transit.VIETNAM", value: 35, label: "Green bean transit, Vietnam", unit: "days", grp: "Lead times" },
   { key: "lead.transit.BRAZIL", value: 60, label: "Green bean transit, Brazil", unit: "days", grp: "Lead times" },

@@ -21,7 +21,11 @@ export const DEFAULT_RUN_DAYS = [1, 2, 3, 4, 5, 6];
 const PRODUCTS = Object.keys(PRODUCT_TYPES) as ProductType[];
 
 // Capacity is set per line and per product; the line's normal capacity is the sum. 0 t means the line does not make it.
-export function LineSetup({ lines, editable }: { lines: LineView[]; editable: boolean }) {
+type MarginInfo = Record<string, { perKg: number; pct: number; fromOrders: boolean }>;
+
+const inr = (n: number) => (Math.abs(n) >= 1e7 ? `₹${(n / 1e7).toFixed(2)} Cr` : `₹${(n / 1e5).toFixed(1)} L`);
+
+export function LineSetup({ lines, editable, marginPerKg }: { lines: LineView[]; editable: boolean; marginPerKg: MarginInfo }) {
   const totals = PRODUCTS.map((pt) => lines.filter((l) => l.active).reduce((a, l) => a + (l.productCaps[pt] ?? 0), 0));
   return (
     <div className="space-y-2">
@@ -41,6 +45,9 @@ export function LineSetup({ lines, editable }: { lines: LineView[]; editable: bo
               <th className={tbl.thR} rowSpan={2}>
                 Line total
               </th>
+              <th className={tbl.thR} rowSpan={2}>
+                Profit / month at full load
+              </th>
               <th className={tbl.th} rowSpan={2}>
                 Runs on
               </th>
@@ -50,13 +57,14 @@ export function LineSetup({ lines, editable }: { lines: LineView[]; editable: bo
               {PRODUCTS.map((pt) => (
                 <th key={pt} className={tbl.thR} title={PRODUCT_HINTS[pt]}>
                   {PRODUCT_TYPES[pt]}
+                  <div className="normal-case tracking-normal text-stone-400">{marginPerKg[pt] ? `${marginPerKg[pt].pct.toFixed(0)}% margin` : ""}</div>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {lines.map((l) => (
-              <LineRow key={l.id} line={l} editable={editable} />
+              <LineRow key={l.id} line={l} editable={editable} marginPerKg={marginPerKg} />
             ))}
             <tr className="bg-stone-50">
               <td className={cx(tbl.td, "font-medium")} colSpan={2}>
@@ -68,23 +76,28 @@ export function LineSetup({ lines, editable }: { lines: LineView[]; editable: bo
                 </td>
               ))}
               <td className={cx(tbl.tdR, "font-semibold")}>{totals.reduce((a, v) => a + v, 0)} t</td>
+              <td className={cx(tbl.tdR, "font-semibold text-emerald-700")}>{inr(PRODUCTS.reduce((a, pt, i) => a + totals[i] * 1000 * (marginPerKg[pt]?.perKg ?? 0), 0))}</td>
               <td className={tbl.td} colSpan={2} />
             </tr>
           </tbody>
         </table>
       </div>
-      <p className="text-[12px] text-stone-500">Enter each product&apos;s share of the line. The line total adds up automatically. Leave a product at 0 if the line doesn&apos;t make it.</p>
+      <p className="text-[12px] text-stone-500">
+        Enter each product&apos;s share of the line. The line total adds up automatically. Leave a product at 0 if the line doesn&apos;t make it. <b>Profit / month</b> is what the line earns if it runs full, using each product&apos;s average margin
+        on current orders{Object.values(marginPerKg).some((m) => !m.fromOrders) ? " (a typical bulk order where there are none)" : ""}; it changes as you move tonnes between products.
+      </p>
     </div>
   );
 }
 
-function LineRow({ line, editable }: { line: LineView; editable: boolean }) {
+function LineRow({ line, editable, marginPerKg }: { line: LineView; editable: boolean; marginPerKg: MarginInfo }) {
   const [caps, setCaps] = useState<Record<string, number>>(Object.fromEntries(PRODUCTS.map((pt) => [pt, line.productTypes.includes(pt) ? Math.round(line.productCaps[pt] ?? 0) : 0])));
   const [active, setActive] = useState(line.active);
   const [runDays, setRunDays] = useState<number[]>(line.runDays ?? DEFAULT_RUN_DAYS);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const total = Object.values(caps).reduce((a, v) => a + (Number(v) || 0), 0);
+  const profit = PRODUCTS.reduce((a, pt) => a + (Number(caps[pt]) || 0) * 1000 * (marginPerKg[pt]?.perKg ?? 0), 0);
   const toggleDay = (d: number) => setRunDays((x) => (x.includes(d) ? x.filter((y) => y !== d) : [...x, d]));
 
   return (
@@ -108,6 +121,7 @@ function LineRow({ line, editable }: { line: LineView; editable: boolean }) {
         </td>
       ))}
       <td className={cx(tbl.tdR, "text-[15px] font-semibold text-stone-900")}>{total} t</td>
+      <td className={cx(tbl.tdR, "whitespace-nowrap font-semibold", profit > 0 ? "text-emerald-700" : "text-stone-400")}>{active && total ? inr(profit) : "–"}</td>
       <td className={cx(tbl.td, "whitespace-nowrap")}>
         <div className="inline-flex border border-stone-300">
           {WEEK.map(([d, short, name]) => (

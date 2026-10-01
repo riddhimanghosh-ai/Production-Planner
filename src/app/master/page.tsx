@@ -21,7 +21,7 @@ const TABS = [
 export default async function MasterPage({ searchParams }: PageProps<"/master">) {
   const viewer = await getViewer();
   const { tab = "customers" } = await searchParams;
-  if (!can(viewer.role, ["ADMIN", "CEO", "COO", "CFO", "BD_HEAD"])) {
+  if (!can(viewer.role, ["ADMIN", "COO", "CFO", "BD_HEAD"])) {
     return (
       <>
         <PageHeader eyebrow="Admin" title="Master" emph="data" />
@@ -107,7 +107,7 @@ export default async function MasterPage({ searchParams }: PageProps<"/master">)
           <div className="mt-4 rounded-sm bg-stone-50 p-3 text-xs text-stone-600">
             <b>What each role can do:</b> Salespeople create, edit and send their own orders and see only their own prices; the sales head works across all orders, reassigns and sets priority; the CFO approves on price, profit and payment; the COO
             approves on factory space and beans, and sets up the lines; the production planner moves orders on the calendar, changes monthly capacity and asks procurement for materials; procurement places purchase orders, receives stock and fixes
-            bean prices; the CEO sees everything; the admin manages settings. Both the CFO and COO must approve before factory time is locked.
+            bean prices; the admin manages settings. Both the CFO and COO must approve before factory time is locked.
           </div>
         </Card>
       )}

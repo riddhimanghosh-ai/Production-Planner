@@ -10,6 +10,7 @@ import { can, productLabel } from "@/lib/domain";
 import { inventoryProjection } from "@/lib/inventory";
 import { requirementsFor } from "@/lib/procurement";
 import { getViewer } from "@/lib/role";
+import { lineMarginFor } from "@/lib/order-margin";
 import { planSuggestions } from "@/lib/recommend";
 import { loadSettings } from "@/lib/settings";
 import { withShare } from "@/lib/workflow";
@@ -77,6 +78,12 @@ export default async function PlanPage({ searchParams }: PageProps<"/plan">) {
             status: r.status,
             productType: r.productType,
             producedMt: st.allocations.find((x) => x.id === r.id)?.producedMt ?? null,
+            marginPct:
+              lineMarginFor(
+                ol,
+                st.orders.find((o) => o.id === r.orderId)!,
+                s,
+              )?.marginPct ?? null,
             product: productLabel(sku, ol.chicoryPct),
           };
         }),

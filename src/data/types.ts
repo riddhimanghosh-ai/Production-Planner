@@ -31,6 +31,10 @@ export type Sku = {
 
 export type Setting = { key: string; value: number; label: string; unit: string; grp: string; sort: number };
 
+// Export business: an order is supplied in containers. One shipment = N containers of one size in a ship month.
+export type ContainerSize = "20" | "40";
+export type Shipment = { month: string; size: ContainerSize; containers: number };
+
 export type Order = {
   id: number;
   ref: string;
@@ -60,6 +64,7 @@ export type Order = {
   // 5. Basic process flow (product, line, blend and pack live on each order line)
   specNotes: string;
   spillOverride: string;
+  shipments?: Shipment[];
   marginSnapshot: unknown;
   issues: unknown;
   createdAt: Date;

@@ -1,8 +1,8 @@
 import { loadCapacityState } from "@/lib/capacity";
-import { addDays, addMonths, currentMonth, isoDate, monthRange, type ApproverRole } from "@/lib/domain";
+import { addDays, addMonths, containerTonnes, currentMonth, isoDate, monthRange, shipmentTonnes, type ApproverRole } from "@/lib/domain";
 import { inventoryProjection, shortages } from "@/lib/inventory";
 import { describeMaterial } from "@/lib/procurement";
-import { DEFAULT_SETTINGS } from "@/lib/settings";
+import { DEFAULT_SETTINGS, loadSettings } from "@/lib/settings";
 import { decide, evaluateOrder, planAvailability, saveOrder, suggestLine, type OrderInput, type Viewer } from "@/lib/workflow";
 import { nextId, store, type Store } from "./store";
 
@@ -16,7 +16,6 @@ const USERS = [
   { name: "Sales head", role: "BD_HEAD", email: "sales.head@slncoffee.example" },
   { name: "CFO", role: "CFO", email: "cfo@slncoffee.example" },
   { name: "COO", role: "COO", email: "coo@slncoffee.example" },
-  { name: "CEO", role: "CEO", email: "ceo@slncoffee.example" },
   { name: "Production planner", role: "PLANNER", email: "planner@slncoffee.example" },
   { name: "Procurement", role: "PROCUREMENT", email: "procurement@slncoffee.example" },
   { name: "Admin", role: "ADMIN", email: "admin@slncoffee.example" },
@@ -48,6 +47,7 @@ type Flow = "draft" | "pending" | "committed" | { approve: ApproverRole[] } | { 
 type SeedOrder = {
   customer: string;
   city: string;
+  country: string;
   contact: string;
   owner: string;
   sku: string;
@@ -67,202 +67,214 @@ type SeedOrder = {
 
 const ORDERS: SeedOrder[] = [
   {
-    customer: "Sahyadri Brew Traders",
-    city: "Mumbai (JNPT)",
-    contact: "Nikhil Patil",
+    customer: "Nordic Roast AB",
+    city: "Gothenburg",
+    country: "Sweden",
+    contact: "Erik Lindqvist",
     owner: "Rohan Mehta",
     sku: "Spray-dried · Pure · Bulk bags",
     months: [2, 11],
     totalMt: 150,
-    price: 1390,
+    price: 15.8,
     origin: "VIETNAM",
     grade: "Robusta Cherry AA",
     gbClosed: 385,
     terms: "LC",
-    incoterm: "EXW",
+    incoterm: "FOB",
     freight: "BUYER",
     flow: "committed",
   },
   {
-    customer: "Nilgiri Café Retail",
-    city: "Bengaluru",
-    contact: "Deepa Menon",
+    customer: "Kaffee Partner GmbH",
+    city: "Hamburg",
+    country: "Germany",
+    contact: "Anna Weber",
     owner: "Priya Nair",
     sku: "Agglomerated · Pure · Glass jars",
     months: [3, 8],
     totalMt: 72,
-    price: 1880,
+    price: 21.36,
     origin: "BRAZIL",
     grade: "Arabica Plantation A",
     terms: "CAD",
-    incoterm: "DAP",
+    incoterm: "CIF",
     freight: "SELLER",
     flow: "committed",
   },
   {
-    customer: "Coromandel Pantry Foods",
-    city: "Chennai",
-    contact: "R. Balaji",
+    customer: "Al Rashid Trading LLC",
+    city: "Jebel Ali",
+    country: "United Arab Emirates",
+    contact: "Omar Al Rashid",
     owner: "Karan Shah",
     sku: "Spray-dried · Chicory · Cans",
     chicoryPct: 30,
     months: [2, 7],
     totalMt: 90,
-    price: 1250,
+    price: 14.2,
     origin: "INDIA",
     grade: "Robusta Parchment AB",
     gbClosed: 360,
     terms: "OA30",
-    incoterm: "DAP",
+    incoterm: "CIF",
     freight: "SELLER",
     flow: "committed",
   },
   {
-    customer: "Deccan Beverage Distributors",
-    city: "Hyderabad",
-    contact: "Sameer Rao",
+    customer: "Pacific Beverage Importers",
+    city: "Long Beach",
+    country: "United States",
+    contact: "Maria Santos",
     owner: "Rohan Mehta",
     sku: "Agglomerated · Pure · Bulk bags",
     months: [4, 9],
     totalMt: 120,
-    price: 1520,
+    price: 17.27,
     origin: "VIETNAM",
     grade: "Robusta Cherry AA",
     terms: "OA60",
-    incoterm: "DAP",
+    incoterm: "CIF",
     freight: "SELLER",
     flow: "committed",
   },
   {
-    customer: "Ganga Valley Distributors",
-    city: "Kolkata",
-    contact: "Subhash Ghosh",
+    customer: "Baltic Food Imports",
+    city: "Gdańsk",
+    country: "Poland",
+    contact: "Piotr Nowak",
     owner: "Priya Nair",
     sku: "Spray-dried · Chicory · Bulk bags",
     chicoryPct: 40,
     months: [3, 8],
     totalMt: 90,
-    price: 1080,
+    price: 12.27,
     origin: "INDIA",
     grade: "Robusta Screen 16",
     gbClosed: 355,
     terms: "LC",
-    incoterm: "EXW",
+    incoterm: "FOB",
     freight: "BUYER",
     flow: "committed",
   },
   {
-    customer: "Rajputana Retail Brands",
-    city: "Jaipur",
-    contact: "Aditi Rathore",
+    customer: "Mitsui Foods KK",
+    city: "Yokohama",
+    country: "Japan",
+    contact: "Kenji Tanaka",
     owner: "Karan Shah",
     sku: "Agglomerated · Chicory · Glass jars",
     chicoryPct: 30,
     months: [5, 7],
     totalMt: 45,
-    price: 1480,
+    price: 16.82,
     origin: "VIETNAM",
     grade: "Robusta Cherry AA",
     terms: "OA60",
-    incoterm: "DAP",
+    incoterm: "CIF",
     freight: "SELLER",
     flow: "committed",
   },
   {
-    customer: "Malabar Food Partners",
-    city: "Kochi",
-    contact: "Thomas Varghese",
+    customer: "Levant Coffee Co.",
+    city: "Beirut",
+    country: "Lebanon",
+    contact: "Nadia Haddad",
     owner: "Rohan Mehta",
     sku: "Spray-dried · Pure · Bulk bags",
     months: [6, 11],
     totalMt: 90,
-    price: 1450,
+    price: 16.48,
     origin: "BRAZIL",
     grade: "Arabica Cherry AB",
     terms: "ADV",
-    incoterm: "DAP",
+    incoterm: "CIF",
     freight: "SELLER",
     flow: "committed",
   },
   {
-    customer: "Himalaya Beverage Holdings",
-    city: "Delhi (ICD Tughlakabad)",
-    contact: "Arjun Malhotra",
+    customer: "Ankara Gıda AŞ",
+    city: "Mersin",
+    country: "Turkey",
+    contact: "Mehmet Yılmaz",
     owner: "Karan Shah",
     sku: "Spray-dried · Pure · Bulk bags",
     months: [9, 14],
     totalMt: 420,
-    price: 1450,
+    price: 16.48,
     origin: "VIETNAM",
     grade: "Robusta Cherry AA",
     terms: "LC",
-    incoterm: "FCA",
+    incoterm: "FOB",
     freight: "BUYER",
     notes: "Annual contract, monthly liftings. Customer wants the price locked for 6 months.",
     flow: { approve: ["CFO"] },
   },
   {
-    customer: "Konkan Brew Co.",
-    city: "Pune",
-    contact: "Sneha Kulkarni",
+    customer: "Seoul Beverage Corp",
+    city: "Busan",
+    country: "South Korea",
+    contact: "Ji-ho Park",
     owner: "Rohan Mehta",
     sku: "Agglomerated · Pure · Bulk bags",
     months: [5, 7],
     totalMt: 150,
-    price: 1480,
+    price: 16.82,
     origin: "VIETNAM",
     grade: "Robusta Cherry AA",
     terms: "OA90",
-    incoterm: "DAP",
+    incoterm: "CIF",
     freight: "SELLER",
     flow: "pending",
   },
   {
-    customer: "Vindhya Pantry",
-    city: "Indore",
-    contact: "Manish Jain",
+    customer: "Cape Coffee Traders",
+    city: "Cape Town",
+    country: "South Africa",
+    contact: "Thabo Nkosi",
     owner: "Priya Nair",
     sku: "Spray-dried · Pure · Cans",
     months: [8, 11],
     totalMt: 55,
-    price: 1680,
+    price: 19.09,
     origin: "BRAZIL",
     grade: "Arabica Cherry AB",
     terms: "OA30",
-    incoterm: "DAP",
+    incoterm: "CIF",
     freight: "SELLER",
-    flow: { sendBack: "COO", comment: "Can filling is tight in the first two months, shift those lines to later months or split across SD02." },
+    flow: { sendBack: "COO", comment: "Can filling is tight in the first two months, shift those lines to later months or split across Line 2." },
   },
   {
-    customer: "Narmada Trading House",
-    city: "Ahmedabad",
-    contact: "Hetal Desai",
+    customer: "Caspian Trade House",
+    city: "Bandar Abbas",
+    country: "Iran",
+    contact: "Reza Farahani",
     owner: "Karan Shah",
     sku: "Agglomerated · Pure · Glass jars",
     months: [6, 9],
     totalMt: 40,
-    price: 1550,
+    price: 17.61,
     origin: "BRAZIL",
     grade: "Arabica Plantation A",
     terms: "OA60",
-    incoterm: "DAP",
+    incoterm: "CIF",
     freight: "SELLER",
-    flow: { reject: "CFO", comment: "Price is below cost at current Brazil bean prices. Re-quote at ₹1,780/kg or switch to Vietnam beans." },
+    flow: { reject: "CFO", comment: "Price is below cost at current Brazil bean prices. Re-quote at $20.20/kg or switch to Vietnam beans." },
   },
   {
-    customer: "Chettinad Café Supply",
-    city: "Madurai",
-    contact: "S. Meenakshi",
+    customer: "Melbourne Brew Supply",
+    city: "Melbourne",
+    country: "Australia",
+    contact: "Olivia Clarke",
     owner: "Rohan Mehta",
     sku: "Spray-dried · Chicory · Cans",
     chicoryPct: 35,
     months: [7, 9],
     totalMt: 45,
-    price: 1260,
+    price: 14.32,
     origin: "INDIA",
     grade: "Robusta Parchment AB",
     terms: "OA30",
-    incoterm: "DAP",
+    incoterm: "CIF",
     freight: "SELLER",
     flow: "draft",
   },
@@ -271,6 +283,7 @@ const ORDERS: SeedOrder[] = [
 export function seedStore() {
   const st = store();
   st.settings = DEFAULT_SETTINGS.map((s, i) => ({ ...s, sort: i }));
+  const settings = loadSettings();
   st.users = USERS.map((u) => ({ ...u, id: nextId("users") }));
   const userId = (name: string) => st.users.find((u) => u.name === name)!.id;
   const viewerFor = (role: string): Viewer => {
@@ -298,19 +311,26 @@ export function seedStore() {
   for (const o of ORDERS) {
     const ownerId = userId(o.owner);
     const customerId = nextId("customers");
-    st.customers.push({ id: customerId, name: o.customer, country: "India", contactPerson: o.contact, bdOwnerId: ownerId });
+    st.customers.push({ id: customerId, name: o.customer, country: o.country, contactPerson: o.contact, bdOwnerId: ownerId });
     const sku = st.skus.find((s) => s.code === o.sku)!;
     const months = monthRange(M(o.months[0]), M(o.months[1]));
-    const perMonth = Math.round((o.totalMt / months.length) * 10) / 10;
+    // Export orders ship in containers: each month as many 40 ft boxes as fit the lot, topped up with 20 ft ones.
+    const target = o.totalMt / months.length;
+    const c40 = containerTonnes(settings, sku.packFormat, "40");
+    const c20 = containerTonnes(settings, sku.packFormat, "20");
+    const n40 = Math.floor(target / c40);
+    const n20 = Math.max(n40 ? 0 : 1, Math.floor((target - n40 * c40) / c20 + 0.01));
+    const shipments = months.flatMap((month) => [...(n40 ? [{ month, size: "40" as const, containers: n40 }] : []), ...(n20 ? [{ month, size: "20" as const, containers: n20 }] : [])]);
+    const needs = shipmentTonnes(settings, sku.packFormat, shipments);
     const state = loadCapacityState();
     const input: OrderInput = {
       customerId,
       newCustomerName: "",
-      customerCountry: "India",
+      customerCountry: o.country,
       contactPerson: o.contact,
       customerType: "REPEAT",
       bdOwnerId: ownerId,
-      destinationCountry: "India",
+      destinationCountry: o.country,
       destinationPort: o.city,
       incoterm: o.incoterm,
       freightBasis: o.freight,
@@ -319,11 +339,12 @@ export function seedStore() {
       gbPriceClosed: !!o.gbClosed,
       gbClosedPrice: o.gbClosed ?? null,
       ...TERMS[o.terms],
-      currency: "INR",
+      currency: "USD",
       specNotes: o.notes ?? "",
       spillOverride: "",
+      shipments,
       // Split each month across the lines that have room, the same way the order guide does.
-      lines: planAvailability(sku.productType, months, perMonth).perMonth.flatMap((m) => {
+      lines: planAvailability(sku.productType, months, needs).perMonth.flatMap((m) => {
         const split = m.proposal.length ? m.proposal.map((p) => ({ ...p })) : [{ lineId: suggestLine(state, sku.productType, m.month)!, quantityMt: 0 }];
         split[0].quantityMt = Math.round((split[0].quantityMt + m.short) * 10) / 10;
         return split.map((p) => ({ skuId: sku.id, chicoryPct: o.chicoryPct ?? 0, month: m.month, quantityMt: p.quantityMt, pricePerKg: o.price, lineId: p.lineId }));
@@ -336,7 +357,7 @@ export function seedStore() {
     const bd: Viewer = { id: ownerId, name: o.owner, role: "BD_EXEC" };
     const id = saveOrder(input, bd, o.flow === "draft" ? "draft" : "submit", undefined, asOf);
     const order = st.orders.find((x) => x.id === id)!;
-    if (o.customer === "Vindhya Pantry") order.customerType = "NEW";
+    if (o.customer === "Cape Coffee Traders") order.customerType = "NEW";
 
     const f = o.flow;
     if (f === "draft" || f === "pending") continue;
@@ -389,13 +410,13 @@ export function seedStore() {
     materialKey: "PM|JAR|100",
     quantity: 150_000,
     neededBy: M(3),
-    note: "Glass jars for the Nilgiri and Rajputana orders",
+    note: "Glass jars for the Kaffee Partner and Mitsui orders",
     status: "OPEN",
     raisedBy: "Production planner",
     createdAt: new Date(),
     poId: null,
   });
-  st.reservations.push({ id: nextId("reservations"), lineId: lineId("Line 2"), month: M(10), quantityMt: 20, label: "Expected repeat order, Sahyadri", productType: "SD", createdBy: "Production planner" });
+  st.reservations.push({ id: nextId("reservations"), lineId: lineId("Line 2"), month: M(10), quantityMt: 20, label: "Expected repeat order, Nordic Roast", productType: "SD", createdBy: "Production planner" });
   seedDailyLogs(st);
 }
 

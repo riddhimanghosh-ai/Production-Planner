@@ -31,7 +31,7 @@ Also: **Profit & costs** (profit per order, quick calculator, cost settings), **
 
 ## Who's who ("Viewing as")
 
-Salespeople (Rohan Mehta, Priya Nair, Karan Shah) · Sales head · CFO · COO · CEO (view only) · Production planner · Procurement · Admin. **All access** can do everything for demos.
+Salespeople (Rohan Mehta, Priya Nair, Karan Shah) · Sales head · CFO · COO · Production planner · Procurement · Admin. **All access** can do everything for demos.
 
 ## Assumptions to confirm with SLN
 

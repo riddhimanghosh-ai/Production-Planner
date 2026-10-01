@@ -8,18 +8,20 @@ import {
   addMonths,
   BLENDS,
   coffeeShare,
+  CONTAINER_SIZES,
+  containerTonnes,
   CURRENCIES,
   formatInr,
   FREIGHT_BASIS,
   GB_GRADES,
   INCOTERMS,
   monthLabel,
-  monthRange,
   ORIGINS,
   PACK_FORMATS,
   PAYMENT_MODES,
   PRODUCT_TYPES,
   productLabel,
+  shipmentTonnes,
   type Origin,
   type PackFormat,
   type ProductType,
@@ -38,9 +40,6 @@ export type WizardState = Omit<OrderInput, "lines"> & {
   blend: string;
   packFormat: string;
   chicoryPct: number;
-  qtyPerMonth: number;
-  fromMonth: string;
-  toMonth: string;
   pricePerKg: number;
   manual: Record<string, Record<number, number>> | null;
 };
@@ -204,17 +203,21 @@ export function OrderWizard({
   const live = status === "PENDING_APPROVAL" || status === "COMMITTED";
 
   const sku = skus.find((s) => s.productType === v.productType && s.blend === v.blend && s.packFormat === v.packFormat);
-  const orderMonths = v.fromMonth && v.toMonth && v.toMonth >= v.fromMonth ? monthRange(v.fromMonth, v.toMonth) : [];
-  const totalT = v.qtyPerMonth * orderMonths.length;
+  // Shipments are containers per ship month; tonnes come from the pack's container load.
+  const shipments = useMemo(() => v.shipments.filter((x) => x.containers > 0 && x.month), [v.shipments]);
+  const needs = useMemo(() => shipmentTonnes(settings, v.packFormat, shipments), [settings, v.packFormat, shipments]);
+  const orderMonths = Object.keys(needs).sort();
+  const totalT = Object.values(needs).reduce((a: number, n: number) => a + n, 0);
+  const totalContainers = shipments.reduce((a, x) => a + x.containers, 0);
   const makeable = (pt: string) => lines.some((l) => l.productTypes.includes(pt));
 
   // Availability check as soon as product, tonnes and months are known.
   useEffect(() => {
-    if (!v.productType || !(v.qtyPerMonth > 0) || !orderMonths.length) return;
-    const t = setTimeout(() => startCheck(async () => setAvail(await availabilityAction(v.productType, orderMonths, v.qtyPerMonth, orderId))), 250);
+    if (!v.productType || !(totalT > 0) || !orderMonths.length) return;
+    const t = setTimeout(() => startCheck(async () => setAvail(await availabilityAction(v.productType, orderMonths, needs, orderId))), 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [v.productType, v.qtyPerMonth, v.fromMonth, v.toMonth, orderId]);
+  }, [v.productType, needs, orderId]);
 
   // Order lines = each month split across lines (the planner's proposal, or the salesperson's own split).
   const orderLines = useMemo(() => {
@@ -257,9 +260,10 @@ export function OrderWizard({
       currency: v.currency,
       specNotes: v.specNotes,
       spillOverride: v.spillOverride,
+      shipments,
       lines: orderLines,
     }),
-    [v, orderLines],
+    [v, orderLines, shipments],
   );
 
   useEffect(() => {
@@ -277,7 +281,7 @@ export function OrderWizard({
   const materialShort = preview?.materials.filter((m) => m.short > 0.5) ?? [];
 
   const stepDone = [
-    !!sku && v.qtyPerMonth > 0 && orderMonths.length > 0,
+    !!sku && totalT > 0,
     !!(v.customerId || v.newCustomerName.trim()) && !!v.contactPerson.trim() && !!v.bdOwnerId,
     !!v.destinationPort.trim() && !!v.destinationCountry.trim() && !!v.incoterm,
     !!v.beanOrigin && !!v.gbGrade && (!v.gbPriceClosed || (v.gbClosedPrice ?? 0) > 0),
@@ -310,10 +314,11 @@ export function OrderWizard({
   };
 
   const useSuggestion = () => {
-    if (!avail?.suggestion) return;
-    const len = orderMonths.length;
-    setV((x) => ({ ...x, fromMonth: avail.suggestion!, toMonth: addMonths(avail.suggestion!, len - 1), manual: null }));
+    if (!avail?.suggestion || !orderMonths.length) return;
+    const shift = monthDiff(orderMonths[0], avail.suggestion);
+    setV((x) => ({ ...x, shipments: x.shipments.map((sh) => ({ ...sh, month: addMonths(sh.month, shift) })), manual: null }));
   };
+  const setShipment = (i: number, patch: Partial<WizardState["shipments"][number]>) => setV((x) => ({ ...x, shipments: x.shipments.map((sh, k) => (k === i ? { ...sh, ...patch } : sh)), manual: null }));
 
   const customer = customers.find((c) => c.id === v.customerId);
   const profitOk = preview && preview.margin.revenue > 0 && preview.margin.marginPct >= preview.margin.targetPct;
@@ -361,7 +366,10 @@ export function OrderWizard({
               <button
                 type="button"
                 onClick={() => setStep(i)}
-                className={cx("-mb-px mr-5 flex items-center gap-1.5 whitespace-nowrap border-b-2 py-2 text-[14px] font-semibold transition-colors", i === step ? "border-brand-600 text-stone-900" : "border-transparent text-stone-500 hover:text-stone-900")}
+                className={cx(
+                  "-mb-px mr-5 flex items-center gap-1.5 whitespace-nowrap border-b-2 py-2 text-[14px] font-semibold transition-colors",
+                  i === step ? "border-brand-600 text-stone-900" : "border-transparent text-stone-500 hover:text-stone-900",
+                )}
               >
                 <span className={cx("flex h-4 w-4 items-center justify-center rounded-sm text-[10px] font-bold", stepDone[i] ? "bg-emerald-600 text-white" : i === step ? "bg-brand-600 text-white" : "bg-stone-200 text-stone-600")}>
                   {stepDone[i] ? "✓" : i + 1}
@@ -427,29 +435,82 @@ export function OrderWizard({
                     ))}
                   </select>
                 </Pick>
-                <Pick label="Tonnes / month">
-                  <input type="number" min="0" step="1" value={v.qtyPerMonth || ""} onChange={(e) => setV((x) => ({ ...x, qtyPerMonth: Number(e.target.value), manual: null }))} className={cx(field, "font-semibold")} placeholder="20" />
-                </Pick>
-                <Pick label="From">
-                  <select value={v.fromMonth} onChange={(e) => setV((x) => ({ ...x, fromMonth: e.target.value, toMonth: x.toMonth < e.target.value ? e.target.value : x.toMonth, manual: null }))} className={field}>
-                    {months.map((m) => (
-                      <option key={m} value={m}>
-                        {monthLabel(m)}
-                      </option>
+              </div>
+
+              <div className="border border-stone-300">
+                <table className="tabular w-full text-[13px]">
+                  <thead>
+                    <tr>
+                      <th className={cx(tblTh)}>Ship month</th>
+                      <th className={cx(tblTh)}>Container</th>
+                      <th className={cx(tblTh, "text-right")}>How many</th>
+                      <th className={cx(tblTh, "text-right")}>Tonnes</th>
+                      <th className={tblTh} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {v.shipments.map((sh, i) => (
+                      <tr key={i}>
+                        <td className="px-2 py-1">
+                          <select value={sh.month} onChange={(e) => setShipment(i, { month: e.target.value })} className={cx(field, "mt-0 w-32")} aria-label="Ship month">
+                            {months.map((m) => (
+                              <option key={m} value={m}>
+                                {monthLabel(m)}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-2 py-1">
+                          <select value={sh.size} onChange={(e) => setShipment(i, { size: e.target.value as "20" | "40" })} className={cx(field, "mt-0 w-24")} aria-label="Container size">
+                            {Object.entries(CONTAINER_SIZES).map(([k, label]) => (
+                              <option key={k} value={k}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-2 py-1 text-right">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={sh.containers || ""}
+                            placeholder="0"
+                            onChange={(e) => setShipment(i, { containers: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
+                            className={cx(field, "mt-0 w-20 text-right font-semibold")}
+                            aria-label="Containers"
+                          />
+                        </td>
+                        <td className="px-2 py-1 text-right text-stone-700">{sh.containers > 0 ? tonnes(sh.containers * containerTonnes(settings, v.packFormat, sh.size)) : <span className="text-stone-300">–</span>}</td>
+                        <td className="px-2 py-1 text-right">
+                          {v.shipments.length > 1 && (
+                            <button type="button" onClick={() => setV((x) => ({ ...x, shipments: x.shipments.filter((_, k) => k !== i), manual: null }))} className="text-[12px] text-stone-400 hover:text-red-700" aria-label="Remove shipment">
+                              ✕
+                            </button>
+                          )}
+                        </td>
+                      </tr>
                     ))}
-                  </select>
-                </Pick>
-                <Pick label="To">
-                  <select value={v.toMonth} onChange={(e) => setV((x) => ({ ...x, toMonth: e.target.value, manual: null }))} className={field}>
-                    {months
-                      .filter((m) => m >= v.fromMonth)
-                      .map((m) => (
-                        <option key={m} value={m}>
-                          {monthLabel(m)}
-                        </option>
-                      ))}
-                  </select>
-                </Pick>
+                    <tr className="bg-stone-50 font-semibold">
+                      <td className="px-2 py-1.5" colSpan={2}>
+                        <button
+                          type="button"
+                          onClick={() => setV((x) => ({ ...x, shipments: [...x.shipments, { month: addMonths(x.shipments.at(-1)?.month ?? months[0], 1), size: x.shipments.at(-1)?.size ?? "40", containers: x.shipments.at(-1)?.containers ?? 1 }] }))}
+                          className="text-[12px] font-medium text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-brand-600"
+                        >
+                          + Add a shipment
+                        </button>
+                      </td>
+                      <td className="px-2 py-1.5 text-right">{totalContainers || "–"}</td>
+                      <td className="px-2 py-1.5 text-right">{totalT ? tonnes(totalT) : "–"}</td>
+                      <td />
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="border-t border-stone-200 px-2 py-1 text-[11px] text-stone-500">
+                  A 40 ft container carries about {containerTonnes(settings, v.packFormat, "40")} t of {PACK_FORMATS[v.packFormat as PackFormat].toLowerCase()}, a 20 ft about {containerTonnes(settings, v.packFormat, "20")} t. Each shipment is made in
+                  its ship month.
+                </p>
               </div>
               {v.productType && makeable(v.productType) && !sku && <p className="border border-amber-300 bg-amber-50 px-3 py-1.5 text-[13px] text-amber-900">Not in the product list, pick another recipe or packing.</p>}
 
@@ -463,12 +524,14 @@ export function OrderWizard({
               ) : (
                 <AvailabilityPanel
                   avail={avail}
-                  ready={!!v.productType && v.qtyPerMonth > 0 && orderMonths.length > 0}
+                  ready={!!v.productType && totalT > 0}
                   totalT={totalT}
                   manual={v.manual}
                   onManual={(m) => set("manual", m)}
                   onUseSuggestion={useSuggestion}
-                  suggestionLabel={avail?.suggestion ? `${monthLabel(avail.suggestion)} – ${monthLabel(addMonths(avail.suggestion, orderMonths.length - 1))} (${shiftText(v.fromMonth, avail.suggestion)})` : null}
+                  suggestionLabel={
+                    avail?.suggestion && orderMonths.length ? `${monthLabel(avail.suggestion)}${orderMonths.length > 1 ? ` – ${monthLabel(addMonths(avail.suggestion, monthDiff(orderMonths[0], orderMonths.at(-1)!)))}` : ""} (${shiftText(orderMonths[0], avail.suggestion)})` : null
+                  }
                 />
               )}
             </div>
@@ -723,8 +786,8 @@ export function OrderWizard({
                       step: 0,
                       rows: [
                         ["Product", sku ? productLabel(sku, v.blend === "CHICORY" ? v.chicoryPct : 0) : ""],
-                        ["Per month", v.qtyPerMonth ? tonnes(v.qtyPerMonth) : ""],
-                        ["Months", orderMonths.length ? `${monthLabel(orderMonths[0])} – ${monthLabel(orderMonths.at(-1)!)}` : ""],
+                        ["Shipments", shipments.length ? shipments.map((x) => `${x.containers} × ${CONTAINER_SIZES[x.size]} ${monthLabel(x.month)}`).join(", ") : ""],
+                        ["Containers", totalContainers ? String(totalContainers) : ""],
                         ["Total", totalT ? tonnes(totalT) : ""],
                       ],
                     },
@@ -855,6 +918,14 @@ export function OrderWizard({
       />
     </div>
   );
+}
+
+const tblTh = "px-2 py-1.5 text-left font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-700";
+
+function monthDiff(a: string, b: string) {
+  const [ya, ma] = a.split("-").map(Number);
+  const [yb, mb] = b.split("-").map(Number);
+  return yb * 12 + mb - (ya * 12 + ma);
 }
 
 function shiftText(from: string, to: string) {
@@ -1077,7 +1148,7 @@ function Summary({
   const m = preview?.margin;
   const rows: [string, React.ReactNode, string?][] = [
     ["Product", sku ?? "–"],
-    ["Quantity", totalT ? `${tonnes(totalT)} · ${months.length} mo` : "–"],
+    ["Quantity", totalT ? `${tonnes(totalT)} · ${months.length} shipment month${months.length === 1 ? "" : "s"}` : "–"],
     ["Customer", customer || "–"],
     ["Price", price ? `${currency === "USD" ? "$" : "₹"}${price.toLocaleString("en-IN")}/kg` : "–"],
     ["Value", m?.revenue ? formatInr(m.revenue) : "–"],

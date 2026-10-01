@@ -16,6 +16,7 @@ export type CalendarOrder = {
   productType: string;
   product: string;
   producedMt: number | null;
+  marginPct: number | null;
 };
 export type CalendarCell = {
   capacity: number;
@@ -390,6 +391,7 @@ function CellDrawer({
                 <div className="flex items-center gap-1 text-xs text-stone-500">
                   <ProductChip p={o.productType} />
                   {o.product} · {o.status === "COMMITTED" ? "approved" : "waiting for approval"}
+                  {o.marginPct != null && <span className={cx("ml-1 font-medium", o.marginPct < 18 ? "text-red-700" : "text-emerald-700")}>· {o.marginPct.toFixed(1)}% margin</span>}
                 </div>
                 {o.status === "COMMITTED" && <MadeRecorder order={o} month={month} canEdit={canEdit} />}
                 {canEdit && <MovePicker order={o} line={line} month={month} lines={lines} months={months} onPick={(lineId, m) => onMove(o, lineId, m)} />}

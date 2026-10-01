@@ -78,6 +78,7 @@ const orderSchema = z.object({
   currency: z.enum(CURRENCIES).catch("INR"),
   specNotes: z.string().max(2000).catch(""),
   spillOverride: z.string().max(1000).catch(""),
+  shipments: z.array(z.object({ month, size: z.enum(["20", "40"]), containers: z.number().int().min(0).max(500) })).max(60).catch([]),
   lines: z.array(lineSchema).max(60),
 });
 
@@ -242,9 +243,10 @@ async function run(fn: (viewer: Awaited<ReturnType<typeof getViewer>>) => unknow
   return { error: null };
 }
 
-export async function availabilityAction(productType: string, months: string[], qtyPerMonth: number, orderId?: number) {
+export async function availabilityAction(productType: string, months: string[], need: number | Record<string, number>, orderId?: number) {
   const valid = months.filter((m) => month.safeParse(m).success).slice(0, 24);
-  return planAvailability(productType, valid, Math.max(0, Number(qtyPerMonth) || 0), orderId);
+  const clean = typeof need === "number" ? Math.max(0, Number(need) || 0) : Object.fromEntries(valid.map((m) => [m, Math.max(0, Number(need[m]) || 0)]));
+  return planAvailability(productType, valid, clean, orderId);
 }
 
 export async function monthCapacityAction(lineId: number, monthKey: string, capacityMt: number, note: string) {
@@ -319,8 +321,8 @@ export async function purchaseOrderAction(materialKey: string, quantity: number,
   return run((v) => createPurchaseOrder(materialKey, Number(quantity), arrivalMonth, String(supplier ?? ""), requestId, v));
 }
 
-export async function receiveAction(poId: number) {
-  return run((v) => receivePurchaseOrder(poId, v));
+export async function receiveAction(poId: number, receivedQty?: number) {
+  return run((v) => receivePurchaseOrder(poId, v, receivedQty == null ? undefined : Number(receivedQty)));
 }
 
 export async function dismissRequestAction(id: number) {

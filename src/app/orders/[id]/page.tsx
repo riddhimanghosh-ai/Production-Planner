@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { CancelOrderButton, DecisionForm, GbClosureForm, ReassignForm } from "@/components/approval-actions";
 import { Badge, ButtonLink, cx, StatusBadge, Tabs, tbl } from "@/components/ui";
 import { capacityAt, loadAt, loadCapacityState } from "@/lib/capacity";
-import { can, formatDate, formatInr, formatPerKg, FREIGHT_BASIS, monthLabel, ORIGINS, productLabel, type Origin } from "@/lib/domain";
+import { can, formatDate, formatInr, formatPerKg, FREIGHT_BASIS, monthLabel, ORIGINS, productLabel, type Origin, containerSummary } from "@/lib/domain";
 import { shortages } from "@/lib/inventory";
 import { bdUsers, getOrderView } from "@/lib/queries";
 import { getViewer } from "@/lib/role";
@@ -59,8 +59,8 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
           <thead>
             <tr>
               <th className={tbl.th}>Product</th>
+              <th className={tbl.th}>Shipments</th>
               <th className={tbl.thR}>Tonnes</th>
-              <th className={tbl.th}>Months</th>
               <th className={tbl.thR}>Value</th>
               <th className={tbl.thR}>Profit</th>
               <th className={tbl.th}>Salesperson</th>
@@ -71,10 +71,13 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
           <tbody>
             <tr>
               <td className={tbl.td}>{productName}</td>
-              <td className={tbl.tdR}>{data.totalMt.toLocaleString("en-IN")}</td>
-              <td className={cx(tbl.td, "whitespace-nowrap")}>
-                {monthLabel(data.firstMonth)} – {monthLabel(data.lastMonth)}
+              <td className={tbl.td}>
+                <div className="font-medium">{containerSummary(order.shipments)}</div>
+                <div className="text-[11px] text-stone-500">
+                  {order.shipments?.length ? order.shipments.map((x) => `${x.containers} × ${x.size} ft ${monthLabel(x.month)}`).join(" · ") : `${monthLabel(data.firstMonth)} – ${monthLabel(data.lastMonth)}`}
+                </div>
               </td>
+              <td className={tbl.tdR}>{data.totalMt.toLocaleString("en-IN")}</td>
               <td className={tbl.tdR}>{commercials ? formatInr(margin.revenue) : "–"}</td>
               <td className={cx(tbl.tdR, "font-semibold", commercials && (margin.marginPct >= margin.targetPct ? "text-emerald-700" : "text-red-700"))}>{commercials ? `${margin.marginPct.toFixed(1)}%` : "–"}</td>
               <td className={tbl.td}>{owner?.name}</td>
@@ -228,9 +231,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
               {log.map((l) => (
                 <tr key={l.id}>
                   <td className={cx(tbl.td, "whitespace-nowrap text-stone-500")}>{formatDate(l.at.toISOString())}</td>
-                  <td className={cx(tbl.td, "whitespace-nowrap")}>
-                    {l.by}
-                  </td>
+                  <td className={cx(tbl.td, "whitespace-nowrap")}>{l.by}</td>
                   <td className={tbl.td}>{l.detail}</td>
                 </tr>
               ))}

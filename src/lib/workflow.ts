@@ -1,5 +1,5 @@
 import { nextId, store, transaction } from "@/data/store";
-import type { Order, OrderLine, Sku } from "@/data/types";
+import type { Order, OrderLine, Shipment, Sku } from "@/data/types";
 import { capacityAt, freeAt, linesFor, loadAt, loadCapacityState, packLoadAt, productFreeAt, type CapacityState, type Issue } from "./capacity";
 import {
   APPROVER_FOCUS,
@@ -43,6 +43,7 @@ export type OrderInput = {
   currency: string;
   specNotes: string;
   spillOverride: string;
+  shipments: Shipment[];
   lines: LineInput[];
 };
 
@@ -147,12 +148,14 @@ export type MonthAvailability = {
 };
 
 // For each requested month, how much space the capable lines have and how the tonnes would split across them.
-export function planAvailability(productType: string, months: string[], qtyPerMonth: number, excludeOrderId?: number) {
+// `need` is either the same tonnes every month or a per-month map (container shipments differ month to month).
+export function planAvailability(productType: string, months: string[], need: number | Record<string, number>, excludeOrderId?: number) {
   const state = loadCapacityState({ excludeOrderId });
   const capable = linesFor(state, productType);
+  const needFor = (month: string) => (typeof need === "number" ? need : (need[month] ?? 0));
   const perMonth: MonthAvailability[] = months.map((month) => {
     const lines = capable.map((l) => ({ lineId: l.id, code: l.code, name: l.name, capacity: capacityAt(state, l.id, month), free: Math.max(0, productFreeAt(state, l.id, productType, month)) }));
-    let left = qtyPerMonth;
+    let left = needFor(month);
     const proposal: { lineId: number; quantityMt: number }[] = [];
     for (const l of [...lines].sort((a, b) => b.free - a.free)) {
       const take = Math.min(left, l.free);
@@ -161,28 +164,35 @@ export function planAvailability(productType: string, months: string[], qtyPerMo
         left -= take;
       }
     }
-    return { month, need: qtyPerMonth, lines, proposal, short: Math.max(0, Math.round(left * 10) / 10) };
+    return { month, need: needFor(month), lines, proposal, short: Math.max(0, Math.round(left * 10) / 10) };
   });
-  // Nearest run of the same length (earlier or later than asked) where every month has room for the full quantity.
+  // Nearest shift of the whole plan (earlier or later) where every month has room for its own tonnes.
   let suggestion: string | null = null;
   if (perMonth.some((m) => m.short > 0) && months.length) {
-    const len = months.length;
+    const sorted = [...months].sort();
+    const offsets = sorted.map((m) => monthDiffLocal(sorted[0], m));
     const fits = (start: string) => {
-      for (let k = 0; k < len; k++) {
-        const m = addMonthsLocal(start, k);
-        if (capable.reduce((a, l) => a + Math.max(0, productFreeAt(state, l.id, productType, m)), 0) < qtyPerMonth) return false;
+      for (let k = 0; k < sorted.length; k++) {
+        const m = addMonthsLocal(start, offsets[k]);
+        if (capable.reduce((a, l) => a + Math.max(0, productFreeAt(state, l.id, productType, m)), 0) < needFor(sorted[k])) return false;
       }
       return true;
     };
     const first = planningStart();
     for (let d = 1; d <= 18 && !suggestion; d++) {
-      const earlier = addMonthsLocal(months[0], -d);
-      const later = addMonthsLocal(months[0], d);
+      const earlier = addMonthsLocal(sorted[0], -d);
+      const later = addMonthsLocal(sorted[0], d);
       if (earlier >= first && fits(earlier)) suggestion = earlier;
       else if (fits(later)) suggestion = later;
     }
   }
   return { perMonth, capable: capable.map((l) => ({ id: l.id, code: l.code, name: l.name })), suggestion };
+}
+
+function monthDiffLocal(a: string, b: string) {
+  const [ya, ma] = a.split("-").map(Number);
+  const [yb, mb] = b.split("-").map(Number);
+  return yb * 12 + mb - (ya * 12 + ma);
 }
 
 function addMonthsLocal(month: string, n: number) {
@@ -404,6 +414,7 @@ function headerFrom(input: OrderInput, customerId: number) {
     currency: input.currency,
     specNotes: input.specNotes,
     spillOverride: input.spillOverride,
+    shipments: input.shipments ?? [],
   };
 }
 
@@ -864,15 +875,23 @@ export function createPurchaseOrder(materialKey: string, quantity: number, arriv
   return id;
 }
 
-export function receivePurchaseOrder(poId: number, viewer: Viewer) {
+// Goods received at the gate. A part delivery adds what came and keeps the rest on order.
+export function receivePurchaseOrder(poId: number, viewer: Viewer, receivedQty?: number) {
   if (!can(viewer.role, ["PROCUREMENT", "COO"])) throw new WorkflowError("Only procurement or the COO can receive stock");
   const st = store();
   const po = st.purchaseOrders.find((p) => p.id === poId);
   if (!po || po.status !== "ORDERED") throw new WorkflowError("Purchase order not open");
-  po.status = "RECEIVED";
+  const qty = receivedQty == null ? po.quantity : receivedQty;
+  if (!(qty > 0)) throw new WorkflowError("Enter the quantity received");
   const item = st.inventory.find((i) => i.key === po.materialKey);
-  if (item) item.onHand += po.quantity;
-  audit(viewer, "RECEIVED", null, `PO-${po.id} received into stock`);
+  if (item) item.onHand += qty;
+  if (qty >= po.quantity - 1e-6) {
+    po.status = "RECEIVED";
+    audit(viewer, "RECEIVED", null, `PO-${po.id} received in full into stock`);
+  } else {
+    po.quantity -= qty;
+    audit(viewer, "RECEIVED", null, `PO-${po.id}: part delivery of ${qty} received, ${po.quantity} still to come`);
+  }
 }
 
 export function dismissRequest(id: number, viewer: Viewer) {

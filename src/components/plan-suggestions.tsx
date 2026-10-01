@@ -20,13 +20,13 @@ export function PlanSuggestions({ items, canEdit, lines, months, free }: { items
   const [showAll, setShowAll] = useState(false);
   const action = items.filter((i) => !i.keep);
   const fine = items.filter((i) => i.keep);
-  const rows = showAll ? items : action;
+  const rows = [...(showAll ? items : action)].sort((a, b) => Number(a.keep) - Number(b.keep) || (b.marginPct ?? -1) - (a.marginPct ?? -1));
 
   return (
     <section className="rounded-md border border-stone-300 bg-white">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-300 px-3 py-1.5">
         <span className="text-[13px] text-stone-700">
-          <b>{action.length}</b> slot{action.length === 1 ? "" : "s"} to place · suggested line and month are pre-filled
+          <b>{action.length}</b> slot{action.length === 1 ? "" : "s"} to place · suggested line and month are pre-filled · when space is tight, place the higher-margin order first
         </span>
         {fine.length > 0 && (
           <button type="button" onClick={() => setShowAll(!showAll)} className="text-xs font-medium text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-brand-600">
@@ -42,6 +42,7 @@ export function PlanSuggestions({ items, canEdit, lines, months, free }: { items
             <thead>
               <tr>
                 <th className={th}>Order</th>
+                <th className={cx(th, "text-right")}>Margin</th>
                 <th className={th}>Now</th>
                 <th className={th}>Move to</th>
                 <th className={th}>Result</th>
@@ -81,7 +82,6 @@ function SlotRow({ i, canEdit, lines, months, free }: { i: Suggestion; canEdit: 
       setMsg(r.error ?? `✓ Moved to ${lineCode}, ${monthLabel(v.month)}`);
     });
 
-
   return (
     <tr className="hover:bg-brand-50/60">
       <td className={g}>
@@ -92,6 +92,9 @@ function SlotRow({ i, canEdit, lines, months, free }: { i: Suggestion; canEdit: 
           <ProductChip p={i.productType} />
         </div>
         <div className="text-[11px] text-stone-500">Deliver {monthLabel(i.deliveryMonth)}</div>
+      </td>
+      <td className={cx(g, "whitespace-nowrap text-right font-semibold", i.marginPct == null ? "text-stone-400" : i.belowMin ? "text-red-700" : "text-emerald-700")} title={i.belowMin ? "Below the CFO minimum" : undefined}>
+        {i.marginPct == null ? "–" : `${i.marginPct.toFixed(1)}%`}
       </td>
       <td className={cx(g, "whitespace-nowrap")}>
         {i.current.line}, {monthLabel(i.current.month)}

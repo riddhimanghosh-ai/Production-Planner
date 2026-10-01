@@ -178,7 +178,7 @@ export function InventoryBoard({
         />
       )}
 
-      {tab === "pos" && <PurchasesOnTheWay purchaseOrders={purchaseOrders} canBuy={canBuy} />}
+      {tab === "pos" && <PurchasesOnTheWay purchaseOrders={purchaseOrders} canBuy={canBuy} materials={rows.map((r) => ({ key: r.key, name: r.name, unit: r.unit }))} months={months} />}
 
       {tab === "beans" && (
         <div className="grid gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -630,7 +630,81 @@ function AttentionRow({ a, months, canBuy }: { a: Attention; months: string[]; c
 }
 
 // Purchases grouped by the month they arrive; each says whether it is due, overdue or on time.
-function PurchasesOnTheWay({ purchaseOrders, canBuy }: { purchaseOrders: PO[]; canBuy: boolean }) {
+// Any purchase not raised from "Needs attention" (a buying opportunity, a contract call-off) is entered here.
+function NewPurchase({ materials, months }: { materials: { key: string; name: string; unit: string }[]; months: string[] }) {
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState(materials[0]?.key ?? "");
+  const [qty, setQty] = useState("");
+  const [month, setMonth] = useState(months[0] ?? "");
+  const [supplier, setSupplier] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const unit = materials.find((m) => m.key === key)?.unit ?? "kg";
+  if (!open)
+    return (
+      <button type="button" onClick={() => setOpen(true)} className={buttonClass("primary", "sm")}>
+        + New purchase
+      </button>
+    );
+  return (
+    <div className="border border-stone-300 bg-white p-3">
+      <div className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-700">New purchase</div>
+      <div className="flex flex-wrap items-end gap-2 text-[13px]">
+        <label className="block">
+          <span className="text-[11px] text-stone-500">Material</span>
+          <select value={key} onChange={(e) => setKey(e.target.value)} className={cx(tbl.input, "block w-64 py-1")}>
+            {materials.map((m) => (
+              <option key={m.key} value={m.key}>
+                {m.name.replace("Green beans · ", "Beans · ")}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[11px] text-stone-500">Quantity ({unitName(unit)})</span>
+          <input type="number" min="0" value={qty} onChange={(e) => setQty(e.target.value)} className={cx(tbl.input, "block w-28 py-1 text-right")} />
+        </label>
+        <label className="block">
+          <span className="text-[11px] text-stone-500">Arrives</span>
+          <select value={month} onChange={(e) => setMonth(e.target.value)} className={cx(tbl.input, "block w-28 py-1")}>
+            {months.map((m) => (
+              <option key={m} value={m}>
+                {monthLabel(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[11px] text-stone-500">Supplier</span>
+          <input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Supplier name" className={cx(tbl.input, "block w-48 py-1")} />
+        </label>
+        <button
+          type="button"
+          disabled={pending || !(Number(qty) > 0) || !supplier.trim()}
+          onClick={() =>
+            start(async () => {
+              const r = await purchaseOrderAction(key, Number(qty) * (unit === "kg" ? 1000 : 1), month, supplier, null);
+              setMsg(r.error ?? "Purchase added");
+              if (!r.error) {
+                setQty("");
+                setSupplier("");
+              }
+            })
+          }
+          className={buttonClass("primary")}
+        >
+          Add purchase
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="px-1 text-[12px] text-stone-500 underline underline-offset-2">
+          Cancel
+        </button>
+      </div>
+      {msg && <p className="mt-2 text-[12px] text-stone-600">{msg}</p>}
+    </div>
+  );
+}
+
+function PurchasesOnTheWay({ purchaseOrders, canBuy, materials, months: horizon }: { purchaseOrders: PO[]; canBuy: boolean; materials: { key: string; name: string; unit: string }[]; months: string[] }) {
   const now = currentMonth();
   const months = [...new Set(purchaseOrders.map((p) => p.arrivalMonth))].sort();
   const overdue = purchaseOrders.filter((p) => p.arrivalMonth < now).length;
@@ -645,9 +719,16 @@ function PurchasesOnTheWay({ purchaseOrders, canBuy }: { purchaseOrders: PO[]; c
       return n;
     });
 
-  if (!purchaseOrders.length) return <p className="border border-stone-300 bg-stone-50 p-4 text-[13px] text-stone-500">No purchases on the way.</p>;
+  if (!purchaseOrders.length)
+    return (
+      <div className="space-y-3">
+        {canBuy && <NewPurchase materials={materials} months={horizon} />}
+        <p className="border border-stone-300 bg-stone-50 p-4 text-[13px] text-stone-500">No purchases on the way.</p>
+      </div>
+    );
   return (
     <div className="space-y-3">
+      {canBuy && <NewPurchase materials={materials} months={horizon} />}
       <p className="text-[13px] text-stone-600">
         <b>{purchaseOrders.length} purchases</b> on the way
         {overdue > 0 && (
@@ -656,7 +737,7 @@ function PurchasesOnTheWay({ purchaseOrders, canBuy }: { purchaseOrders: PO[]; c
             · <b className="text-red-700">{overdue} overdue</b>
           </>
         )}
-        {due > 0 && <> · {due} due this month</>}. Press <b>Received</b> when the goods arrive; the stock updates.
+        {due > 0 && <> · {due} due this month</>}. When goods arrive, enter what came and press <b>Received</b>: stock goes up, and a part delivery keeps the rest on order.
         <button type="button" onClick={() => setOpen(new Set(months))} className="ml-3 text-[12px] text-stone-500 underline underline-offset-2 hover:text-stone-900">
           Open all
         </button>
@@ -710,6 +791,8 @@ function PurchasesOnTheWay({ purchaseOrders, canBuy }: { purchaseOrders: PO[]; c
 function PoRow({ po, canBuy, status }: { po: PO; canBuy: boolean; status: "overdue" | "due" | "ontime" }) {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
+  const factor = po.unit === "kg" ? 1000 : 1;
+  const [got, setGot] = useState(String(Math.round((po.quantity / factor) * 10) / 10));
   return (
     <tr className={cx(tbl.tr, status === "overdue" && "bg-red-50/50")}>
       <td className={cx(tbl.td, "font-medium text-stone-900")}>{po.name.replace("Green beans · ", "Beans · ")}</td>
@@ -723,9 +806,12 @@ function PoRow({ po, canBuy, status }: { po: PO; canBuy: boolean; status: "overd
       <td className={cx(tbl.td, "font-mono text-[11px] text-stone-500")}>PO-{po.id}</td>
       <td className={cx(tbl.td, "whitespace-nowrap text-right")}>
         {canBuy && (
-          <button type="button" disabled={pending} onClick={() => start(async () => setMsg((await receiveAction(po.id)).error))} className={buttonClass("secondary", "sm")}>
-            Received
-          </button>
+          <span className="inline-flex items-center gap-1">
+            <input type="number" min="0" value={got} onChange={(e) => setGot(e.target.value)} className={cx(tbl.input, "w-20 text-right")} aria-label="Quantity received" />
+            <button type="button" disabled={pending || !(Number(got) > 0)} onClick={() => start(async () => setMsg((await receiveAction(po.id, Number(got) * factor)).error))} className={buttonClass("secondary", "sm")}>
+              Received
+            </button>
+          </span>
         )}
         {msg && <span className="ml-1 text-[11px] text-red-700">{msg}</span>}
       </td>
