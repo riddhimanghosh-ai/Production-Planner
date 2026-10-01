@@ -2,7 +2,7 @@ import type { WizardState } from "@/components/order-wizard";
 import { store } from "@/data/store";
 import type { Order } from "@/data/types";
 import { loadLines, planHorizon } from "./capacity";
-import { addMonths, containerTonnes, ORIGINS, planningStart } from "./domain";
+import { addMonths, ORIGINS, planningStart } from "./domain";
 import { activeSkus, bdUsers, customers } from "./queries";
 import { loadSettings } from "./settings";
 import type { Viewer } from "./workflow";
@@ -20,6 +20,7 @@ export function orderFormProps(viewer: Viewer) {
     marketPrices: Object.fromEntries(Object.keys(ORIGINS).map((o) => [o, s[`bean_price.${o}`]])),
     leadDays: Object.fromEntries(Object.keys(ORIGINS).map((o) => [o, s[`lead.transit.${o}`] + s["lead.bean_buffer"]])),
     settings: s,
+    pastSales: st.pastSales.map((p) => ({ ...p })),
   };
 }
 
@@ -30,7 +31,7 @@ export function blankWizard(viewer: Viewer, prefill: { product?: string; from?: 
     blend: prefill.blend && ["PURE", "CHICORY"].includes(prefill.blend) ? prefill.blend : "PURE",
     packFormat: prefill.pack && ["BULK", "GLASS", "CAN"].includes(prefill.pack) ? prefill.pack : "BULK",
     chicoryPct: 30,
-    shipments: [{ month: from, size: "40", containers: prefill.product ? 1 : 0 }],
+    shipments: [{ month: from, quantityMt: 0 }],
     pricePerKg: 0,
     manual: null,
     customerId: null,
@@ -69,9 +70,7 @@ export function wizardFromOrder(order: Order): WizardState {
     blend: sku?.blend ?? "PURE",
     packFormat: sku?.packFormat ?? "BULK",
     chicoryPct: lines[0]?.chicoryPct || 30,
-    shipments: order.shipments?.length
-      ? order.shipments
-      : months.map((m) => ({ month: m, size: "40" as const, containers: Math.max(1, Math.round(lines.filter((l) => l.month === m).reduce((a, l) => a + l.quantityMt, 0) / containerTonnes(loadSettings(), sku?.packFormat ?? "BULK", "40"))) })),
+    shipments: order.shipments?.length && "quantityMt" in order.shipments[0] ? order.shipments : months.map((m) => ({ month: m, quantityMt: Math.round(lines.filter((l) => l.month === m).reduce((a, l) => a + l.quantityMt, 0) * 10) / 10 })),
     pricePerKg: lines[0]?.pricePerKg ?? 0,
     manual,
     customerId: order.customerId,

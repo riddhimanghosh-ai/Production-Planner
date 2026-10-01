@@ -22,7 +22,7 @@ export default function DemoPage() {
       viewer: id("Rohan Mehta"),
       where: "New order · Check availability",
       href: "/orders/new",
-      show: "Pick Agglomerated and add shipments of 2 × 40 ft containers for Feb, Mar and Apr. The lines are full; it suggests earlier months.",
+      show: "Pick Agglomerated and add shipments of 40 t for Feb, Mar and Apr. The lines are full; it suggests earlier months.",
       point: "Availability is checked first, live against the calendar.",
     },
     {

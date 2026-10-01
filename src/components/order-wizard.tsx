@@ -3,13 +3,11 @@
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
 import { availabilityAction, previewOrder, saveOrderAction } from "@/app/actions";
-import type { Sku } from "@/data/types";
+import type { PastSale, Sku } from "@/data/types";
 import {
   addMonths,
   BLENDS,
   coffeeShare,
-  CONTAINER_SIZES,
-  containerTonnes,
   CURRENCIES,
   formatInr,
   FREIGHT_BASIS,
@@ -146,6 +144,84 @@ function CustomerSearch({ customers, selectedId, newName, onPick, onNew }: { cus
   );
 }
 
+// What this customer paid before, plus the going rate for the same product across customers.
+function PriceHistory({
+  customerName,
+  history,
+  market,
+  productType,
+  packFormat,
+  marginAt,
+  minPct,
+  onUse,
+}: {
+  customerName: string;
+  history: PastSale[];
+  market: PastSale[];
+  productType: string;
+  packFormat: string;
+  marginAt: (price: number) => number | null;
+  minPct: number;
+  onUse: (price: number) => void;
+}) {
+  const same = history.filter((p) => p.productType === productType && p.packFormat === packFormat);
+  const last = same[0];
+  const avg = market.length ? Math.round(market.reduce((a, p) => a + p.pricePerKg * p.quantityMt, 0) / market.reduce((a, p) => a + p.quantityMt, 0)) : null;
+  const pct = (price: number) => {
+    const m = marginAt(price);
+    return m == null ? "–" : <span className={m >= minPct ? "text-emerald-700" : "text-red-700"}>{m.toFixed(1)}%</span>;
+  };
+  return (
+    <div className="border border-stone-300">
+      <div className="border-b border-stone-300 bg-stone-50 px-2.5 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-700">Price history, {customerName}</div>
+      {history.length === 0 ? (
+        <p className="px-2.5 py-2 text-[12px] text-stone-500">No earlier sales to this customer.</p>
+      ) : (
+        <table className="tabular w-full text-[13px]">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-[0.12em] text-stone-500">
+              <th className="px-2.5 py-1 text-left font-mono font-semibold">Date</th>
+              <th className="px-2.5 py-1 text-left font-mono font-semibold">Product</th>
+              <th className="px-2.5 py-1 text-right font-mono font-semibold">Tonnes</th>
+              <th className="px-2.5 py-1 text-right font-mono font-semibold">Price / kg</th>
+              <th className="px-2.5 py-1 text-right font-mono font-semibold" title="What that price would earn at today's costs">
+                Margin today
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map((p) => {
+              const sameProduct = p.productType === productType && p.packFormat === packFormat;
+              return (
+                <tr key={p.id} className={cx("border-t border-stone-200", !sameProduct && "text-stone-400")}>
+                  <td className="px-2.5 py-1">{new Date(`${p.date}T00:00:00`).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}</td>
+                  <td className="px-2.5 py-1">{productLabel({ productType: p.productType, blend: p.blend, packFormat: p.packFormat })}</td>
+                  <td className="px-2.5 py-1 text-right">{p.quantityMt}</td>
+                  <td className="px-2.5 py-1 text-right font-semibold">₹{p.pricePerKg.toLocaleString("en-IN")}</td>
+                  <td className="px-2.5 py-1 text-right">{sameProduct ? pct(p.pricePerKg) : "–"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      <div className="flex flex-wrap gap-2 border-t border-stone-300 px-2.5 py-2 text-[12px]">
+        {last && (
+          <button type="button" onClick={() => onUse(last.pricePerKg)} className={buttonClass("secondary", "sm")}>
+            Use their last price ₹{last.pricePerKg.toLocaleString("en-IN")}
+          </button>
+        )}
+        {avg && (
+          <button type="button" onClick={() => onUse(avg)} className={buttonClass("secondary", "sm")} title="Weighted average of past sales of this product, all customers">
+            Use average for this product ₹{avg.toLocaleString("en-IN")}
+          </button>
+        )}
+        {!last && !avg && <span className="text-stone-500">No past sales of this product yet.</span>}
+      </div>
+    </div>
+  );
+}
+
 function fmtPrice(p: number | null, currency: string) {
   if (p == null) return "–";
   return currency === "USD" ? `$${p.toFixed(2)}` : `₹${p.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -177,6 +253,7 @@ export function OrderWizard({
   marketPrices,
   leadDays,
   settings,
+  pastSales,
 }: {
   orderId?: number;
   status?: string;
@@ -190,6 +267,7 @@ export function OrderWizard({
   marketPrices: Record<string, number>;
   leadDays: Record<string, number>;
   settings: Record<string, number>;
+  pastSales: PastSale[];
 }) {
   const [v, setV] = useState<WizardState>(initial);
   const [step, setStep] = useState(orderId ? 5 : 0);
@@ -203,12 +281,11 @@ export function OrderWizard({
   const live = status === "PENDING_APPROVAL" || status === "COMMITTED";
 
   const sku = skus.find((s) => s.productType === v.productType && s.blend === v.blend && s.packFormat === v.packFormat);
-  // Shipments are containers per ship month; tonnes come from the pack's container load.
-  const shipments = useMemo(() => v.shipments.filter((x) => x.containers > 0 && x.month), [v.shipments]);
-  const needs = useMemo(() => shipmentTonnes(settings, v.packFormat, shipments), [settings, v.packFormat, shipments]);
+  // An order ships in lots: tonnes per ship month.
+  const shipments = useMemo(() => v.shipments.filter((x) => x.quantityMt > 0 && x.month), [v.shipments]);
+  const needs = useMemo(() => shipmentTonnes(shipments), [shipments]);
   const orderMonths = Object.keys(needs).sort();
   const totalT = Object.values(needs).reduce((a: number, n: number) => a + n, 0);
-  const totalContainers = shipments.reduce((a, x) => a + x.containers, 0);
   const makeable = (pt: string) => lines.some((l) => l.productTypes.includes(pt));
 
   // Availability check as soon as product, tonnes and months are known.
@@ -442,9 +519,7 @@ export function OrderWizard({
                   <thead>
                     <tr>
                       <th className={cx(tblTh)}>Ship month</th>
-                      <th className={cx(tblTh)}>Container</th>
-                      <th className={cx(tblTh, "text-right")}>How many</th>
-                      <th className={cx(tblTh, "text-right")}>Tonnes</th>
+                      <th className={cx(tblTh, "text-right")}>Quantity (t)</th>
                       <th className={tblTh} />
                     </tr>
                   </thead>
@@ -460,28 +535,18 @@ export function OrderWizard({
                             ))}
                           </select>
                         </td>
-                        <td className="px-2 py-1">
-                          <select value={sh.size} onChange={(e) => setShipment(i, { size: e.target.value as "20" | "40" })} className={cx(field, "mt-0 w-24")} aria-label="Container size">
-                            {Object.entries(CONTAINER_SIZES).map(([k, label]) => (
-                              <option key={k} value={k}>
-                                {label}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
                         <td className="px-2 py-1 text-right">
                           <input
                             type="number"
                             min="0"
-                            step="1"
-                            value={sh.containers || ""}
+                            step="0.5"
+                            value={sh.quantityMt || ""}
                             placeholder="0"
-                            onChange={(e) => setShipment(i, { containers: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
-                            className={cx(field, "mt-0 w-20 text-right font-semibold")}
-                            aria-label="Containers"
+                            onChange={(e) => setShipment(i, { quantityMt: Math.max(0, Number(e.target.value) || 0) })}
+                            className={cx(field, "mt-0 w-28 text-right font-semibold")}
+                            aria-label="Tonnes"
                           />
                         </td>
-                        <td className="px-2 py-1 text-right text-stone-700">{sh.containers > 0 ? tonnes(sh.containers * containerTonnes(settings, v.packFormat, sh.size)) : <span className="text-stone-300">–</span>}</td>
                         <td className="px-2 py-1 text-right">
                           {v.shipments.length > 1 && (
                             <button type="button" onClick={() => setV((x) => ({ ...x, shipments: x.shipments.filter((_, k) => k !== i), manual: null }))} className="text-[12px] text-stone-400 hover:text-red-700" aria-label="Remove shipment">
@@ -492,25 +557,21 @@ export function OrderWizard({
                       </tr>
                     ))}
                     <tr className="bg-stone-50 font-semibold">
-                      <td className="px-2 py-1.5" colSpan={2}>
+                      <td className="px-2 py-1.5">
                         <button
                           type="button"
-                          onClick={() => setV((x) => ({ ...x, shipments: [...x.shipments, { month: addMonths(x.shipments.at(-1)?.month ?? months[0], 1), size: x.shipments.at(-1)?.size ?? "40", containers: x.shipments.at(-1)?.containers ?? 1 }] }))}
+                          onClick={() => setV((x) => ({ ...x, shipments: [...x.shipments, { month: addMonths(x.shipments.at(-1)?.month ?? months[0], 1), quantityMt: x.shipments.at(-1)?.quantityMt ?? 0 }] }))}
                           className="text-[12px] font-medium text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-brand-600"
                         >
                           + Add a shipment
                         </button>
                       </td>
-                      <td className="px-2 py-1.5 text-right">{totalContainers || "–"}</td>
-                      <td className="px-2 py-1.5 text-right">{totalT ? tonnes(totalT) : "–"}</td>
+                      <td className="px-2 py-1.5 text-right">{totalT ? `Total ${tonnes(totalT)}` : "–"}</td>
                       <td />
                     </tr>
                   </tbody>
                 </table>
-                <p className="border-t border-stone-200 px-2 py-1 text-[11px] text-stone-500">
-                  A 40 ft container carries about {containerTonnes(settings, v.packFormat, "40")} t of {PACK_FORMATS[v.packFormat as PackFormat].toLowerCase()}, a 20 ft about {containerTonnes(settings, v.packFormat, "20")} t. Each shipment is made in
-                  its ship month.
-                </p>
+                <p className="border-t border-stone-200 px-2 py-1 text-[11px] text-stone-500">Add one row per shipment. Each shipment is made in its ship month.</p>
               </div>
               {v.productType && makeable(v.productType) && !sku && <p className="border border-amber-300 bg-amber-50 px-3 py-1.5 text-[13px] text-amber-900">Not in the product list, pick another recipe or packing.</p>}
 
@@ -530,7 +591,9 @@ export function OrderWizard({
                   onManual={(m) => set("manual", m)}
                   onUseSuggestion={useSuggestion}
                   suggestionLabel={
-                    avail?.suggestion && orderMonths.length ? `${monthLabel(avail.suggestion)}${orderMonths.length > 1 ? ` – ${monthLabel(addMonths(avail.suggestion, monthDiff(orderMonths[0], orderMonths.at(-1)!)))}` : ""} (${shiftText(orderMonths[0], avail.suggestion)})` : null
+                    avail?.suggestion && orderMonths.length
+                      ? `${monthLabel(avail.suggestion)}${orderMonths.length > 1 ? ` – ${monthLabel(addMonths(avail.suggestion, monthDiff(orderMonths[0], orderMonths.at(-1)!)))}` : ""} (${shiftText(orderMonths[0], avail.suggestion)})`
+                      : null
                   }
                 />
               )}
@@ -685,6 +748,16 @@ export function OrderWizard({
           {step === 4 && (
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-5">
+                <PriceHistory
+                  customerName={customer?.name ?? (v.newCustomerName || "this customer")}
+                  history={pastSales.filter((p) => p.customerId === v.customerId).sort((a, b) => b.date.localeCompare(a.date))}
+                  market={pastSales.filter((p) => p.productType === v.productType && p.packFormat === v.packFormat)}
+                  productType={v.productType}
+                  packFormat={v.packFormat}
+                  marginAt={(price) => pricing?.marginAt(price) ?? null}
+                  minPct={minPct}
+                  onUse={(price) => set("pricePerKg", price)}
+                />
                 {pricing && (
                   <table className="w-full border border-stone-300 text-[13px]">
                     <thead>
@@ -786,8 +859,8 @@ export function OrderWizard({
                       step: 0,
                       rows: [
                         ["Product", sku ? productLabel(sku, v.blend === "CHICORY" ? v.chicoryPct : 0) : ""],
-                        ["Shipments", shipments.length ? shipments.map((x) => `${x.containers} × ${CONTAINER_SIZES[x.size]} ${monthLabel(x.month)}`).join(", ") : ""],
-                        ["Containers", totalContainers ? String(totalContainers) : ""],
+                        ["Shipments", shipments.length ? shipments.map((x) => `${tonnes(x.quantityMt)} ${monthLabel(x.month)}`).join(", ") : ""],
+                        ["Total", totalT ? tonnes(totalT) : ""],
                         ["Total", totalT ? tonnes(totalT) : ""],
                       ],
                     },

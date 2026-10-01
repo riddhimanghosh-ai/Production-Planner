@@ -1,8 +1,8 @@
 import { loadCapacityState } from "@/lib/capacity";
-import { addDays, addMonths, containerTonnes, currentMonth, isoDate, monthRange, shipmentTonnes, type ApproverRole } from "@/lib/domain";
+import { addDays, addMonths, currentMonth, isoDate, monthRange, shipmentTonnes, type ApproverRole } from "@/lib/domain";
 import { inventoryProjection, shortages } from "@/lib/inventory";
 import { describeMaterial } from "@/lib/procurement";
-import { DEFAULT_SETTINGS, loadSettings } from "@/lib/settings";
+import { DEFAULT_SETTINGS } from "@/lib/settings";
 import { decide, evaluateOrder, planAvailability, saveOrder, suggestLine, type OrderInput, type Viewer } from "@/lib/workflow";
 import { nextId, store, type Store } from "./store";
 
@@ -199,7 +199,7 @@ const ORDERS: SeedOrder[] = [
     owner: "Karan Shah",
     sku: "Spray-dried · Pure · Bulk bags",
     months: [9, 14],
-    totalMt: 420,
+    totalMt: 180,
     price: 1450,
     origin: "VIETNAM",
     grade: "Robusta Cherry AA",
@@ -283,7 +283,6 @@ const ORDERS: SeedOrder[] = [
 export function seedStore() {
   const st = store();
   st.settings = DEFAULT_SETTINGS.map((s, i) => ({ ...s, sort: i }));
-  const settings = loadSettings();
   st.users = USERS.map((u) => ({ ...u, id: nextId("users") }));
   const userId = (name: string) => st.users.find((u) => u.name === name)!.id;
   const viewerFor = (role: string): Viewer => {
@@ -314,14 +313,28 @@ export function seedStore() {
     st.customers.push({ id: customerId, name: o.customer, country: o.country, contactPerson: o.contact, bdOwnerId: ownerId });
     const sku = st.skus.find((s) => s.code === o.sku)!;
     const months = monthRange(M(o.months[0]), M(o.months[1]));
-    // Export orders ship in containers: each month as many 40 ft boxes as fit the lot, topped up with 20 ft ones.
-    const target = o.totalMt / months.length;
-    const c40 = containerTonnes(settings, sku.packFormat, "40");
-    const c20 = containerTonnes(settings, sku.packFormat, "20");
-    const n40 = Math.floor(target / c40);
-    const n20 = Math.max(n40 ? 0 : 1, Math.floor((target - n40 * c40) / c20 + 0.01));
-    const shipments = months.flatMap((month) => [...(n40 ? [{ month, size: "40" as const, containers: n40 }] : []), ...(n20 ? [{ month, size: "20" as const, containers: n20 }] : [])]);
-    const needs = shipmentTonnes(settings, sku.packFormat, shipments);
+    // Price history: repeat customers bought the same product before, at slightly lower prices.
+    if (o.customer !== "Cape Coffee Traders") {
+      const history = o.flow === "draft" ? [-16, -10] : [-17, -11, -5];
+      history.forEach((ago, i) => {
+        const rise = [0.93, 0.96, 0.985][i + (3 - history.length)];
+        st.pastSales.push({
+          id: nextId("pastSales"),
+          customerId,
+          date: `${M(ago)}-15`,
+          productType: sku.productType,
+          blend: sku.blend,
+          packFormat: sku.packFormat,
+          quantityMt: Math.round((o.totalMt / 3) * 10) / 10,
+          pricePerKg: Math.round(o.price * rise),
+          currency: "INR",
+        });
+      });
+    }
+    // One shipment per month, sized from the order's total.
+    const perMonth = Math.round((o.totalMt / months.length) * 10) / 10;
+    const shipments = months.map((month) => ({ month, quantityMt: perMonth }));
+    const needs = shipmentTonnes(shipments);
     const state = loadCapacityState();
     const input: OrderInput = {
       customerId,

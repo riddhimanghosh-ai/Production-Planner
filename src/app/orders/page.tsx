@@ -2,11 +2,12 @@ import Link from "next/link";
 import { QuickDecision } from "@/components/approval-actions";
 import { ExportButton } from "@/components/export-button";
 import { ButtonLink, cx, Empty, PageHeader, Pager, StatusBadge, Tabs, tbl } from "@/components/ui";
-import { can, formatInr, monthLabel, ORDER_STATUS, productLabel, type OrderStatus, containerSummary } from "@/lib/domain";
+import { can, formatInr, monthLabel, ORDER_STATUS, productLabel, type OrderStatus } from "@/lib/domain";
 import { shortages } from "@/lib/inventory";
 import { Sellable } from "@/components/sellable";
 import { loadCapacityState, packLoadAt, planHorizon } from "@/lib/capacity";
 import { openRoom } from "@/lib/recommend";
+import { orderFeasibility, type Feasibility } from "@/lib/feasibility";
 import { loadSettings } from "@/lib/settings";
 import { activeSkus, approvalQueue, listOrderViews, type OrderView } from "@/lib/queries";
 import { getViewer } from "@/lib/role";
@@ -164,7 +165,6 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
                 <th className={tbl.th}>Customer</th>
                 <th className={tbl.th}>Salesperson</th>
                 <th className={tbl.th}>Product</th>
-                <th className={tbl.th}>Containers</th>
                 <th className={tbl.thR}>Tonnes</th>
                 <th className={tbl.th}>Ships</th>
                 <th className={tbl.thR}>Value</th>
@@ -187,7 +187,6 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
                     <td className={cx(tbl.td, "font-medium text-stone-900")}>{v.customer.name}</td>
                     <td className={cx(tbl.td, "text-stone-600")}>{v.owner?.name}</td>
                     <td className={tbl.td}>{first ? productLabel(first.sku, first.chicoryPct) : "–"}</td>
-                    <td className={cx(tbl.td, "whitespace-nowrap font-medium")}>{containerSummary(v.order.shipments)}</td>
                     <td className={tbl.tdR}>{v.totalMt.toLocaleString("en-IN")}</td>
                     <td className={cx(tbl.td, "whitespace-nowrap")}>
                       {monthLabel(v.firstMonth)}
@@ -231,7 +230,7 @@ function Approvals({ queue, mineCount, viewer }: { queue: ReturnType<typeof appr
               <th className={tbl.thR}>Tonnes</th>
               <th className={tbl.thR}>Value</th>
               <th className={tbl.thR}>Margin</th>
-              <th className={tbl.th}>Checks</th>
+              <th className={tbl.th}>Feasible? (COO check)</th>
               <th className={tbl.th}>CFO</th>
               <th className={tbl.th}>COO</th>
               <th className={tbl.thR}>Waiting</th>
@@ -241,15 +240,9 @@ function Approvals({ queue, mineCount, viewer }: { queue: ReturnType<typeof appr
           <tbody>
             {queue.map((q) => {
               const first = q.lines[0];
-              const spills = q.issues.filter((i) => i.kind === "OVERBOOK");
-              const matShort = shorts.filter((x) => x.orders.some((o) => o.orderId === q.order.id));
               const signable = q.approvals.filter((a) => a.status === "PENDING" && (role === "ALL" || a.role === role)).map((a) => a.role);
               const profitOk = q.margin.marginPct >= q.margin.targetPct;
-              const checks = [
-                { ok: !spills.length, label: spills.length ? `Line full ${spills.length} mo` : "Line space" },
-                { ok: !matShort.length, label: matShort.length ? `${matShort.length} to buy` : "Materials" },
-                { ok: q.order.gbPriceClosed, label: q.order.gbPriceClosed ? "Bean price fixed" : "Bean price open", soft: true },
-              ];
+              const f = orderFeasibility(q.order.id, shorts);
               return (
                 <tr key={q.order.id} className={tbl.tr}>
                   <td className={tbl.td}>
@@ -271,21 +264,7 @@ function Approvals({ queue, mineCount, viewer }: { queue: ReturnType<typeof appr
                   <td className={tbl.tdR}>{q.totalMt.toLocaleString("en-IN")}</td>
                   <td className={tbl.tdR}>{formatInr(q.margin.revenue)}</td>
                   <td className={cx(tbl.tdR, "font-semibold", profitOk ? "text-emerald-700" : "text-red-700")}>{q.margin.marginPct.toFixed(1)}%</td>
-                  <td className={tbl.td}>
-                    <div className="flex flex-wrap gap-1">
-                      {checks.map((c) => (
-                        <span
-                          key={c.label}
-                          className={cx(
-                            "whitespace-nowrap rounded-sm border px-1.5 py-px text-[11px] font-medium",
-                            c.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : c.soft ? "border-amber-200 bg-amber-50 text-amber-800" : "border-red-200 bg-red-50 text-red-800",
-                          )}
-                        >
-                          {c.ok ? "✓" : c.soft ? "~" : "✕"} {c.label}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
+                  <td className={cx(tbl.td, "min-w-64")}>{f && <FeasibilityCell f={f} beanFixed={q.order.gbPriceClosed} orderId={q.order.id} />}</td>
                   <td className={tbl.td}>
                     <Decision status={q.approvals.find((a) => a.role === "CFO")?.status} />
                   </td>
@@ -301,6 +280,39 @@ function Approvals({ queue, mineCount, viewer }: { queue: ReturnType<typeof appr
         </table>
       </div>
     </>
+  );
+}
+
+// COO view of one order: verdict, then the two things checked in plain words.
+function FeasibilityCell({ f, beanFixed, orderId }: { f: Feasibility; beanFixed: boolean; orderId: number }) {
+  const date = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  const m = f.materials[0];
+  return (
+    <div className="space-y-0.5 text-[12px]">
+      <div className={cx("font-semibold", f.verdict === "ok" ? "text-emerald-700" : f.verdict === "buy" ? "text-stone-900" : "text-red-700")}>{f.verdict === "ok" ? "✓ Feasible" : f.verdict === "buy" ? "Feasible if we buy" : "✕ Not feasible"}</div>
+      <div className="text-stone-600">
+        Line: {f.line.ok ? <span className="text-emerald-700">room in every ship month</span> : <span className="text-red-700">short {f.line.short.map((x) => `${x.short} t in ${monthLabel(x.month)}`).join(", ")}</span>}
+      </div>
+      <div className="text-stone-600">
+        Stock:{" "}
+        {!m ? (
+          <span className="text-emerald-700">covered by stock and purchases on the way</span>
+        ) : !m.canArrive ? (
+          <span className="text-red-700">
+            {m.name} can&apos;t arrive before {monthLabel(m.earliest)}
+          </span>
+        ) : (
+          <span>
+            buy {m.name}
+            {f.materials.length > 1 ? ` + ${f.materials.length - 1} more` : ""} by {m.late ? "now" : date(m.orderBy)}
+          </span>
+        )}
+      </div>
+      {!beanFixed && <div className="text-stone-500">Bean price not fixed yet</div>}
+      <Link href={`/orders/${orderId}?tab=coo`} className="text-[11px] text-stone-500 underline underline-offset-2 hover:text-stone-900">
+        Full check
+      </Link>
+    </div>
   );
 }
 

@@ -78,7 +78,7 @@ const orderSchema = z.object({
   currency: z.enum(CURRENCIES).catch("INR"),
   specNotes: z.string().max(2000).catch(""),
   spillOverride: z.string().max(1000).catch(""),
-  shipments: z.array(z.object({ month, size: z.enum(["20", "40"]), containers: z.number().int().min(0).max(500) })).max(60).catch([]),
+  shipments: z.array(z.object({ month, quantityMt: z.number().min(0).max(100000) })).max(60).catch([]),
   lines: z.array(lineSchema).max(60),
 });
 

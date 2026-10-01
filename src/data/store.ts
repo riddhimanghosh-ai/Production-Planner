@@ -9,6 +9,7 @@ import type {
   PurchaseRequest,
   Reservation,
   DayLog,
+  PastSale,
   Customer,
   Line,
   LineProduct,
@@ -34,6 +35,7 @@ export type Store = {
   approvals: Approval[];
   reservations: Reservation[];
   dayLogs: DayLog[];
+  pastSales: PastSale[];
   inventory: InventoryItem[];
   purchaseOrders: PurchaseOrder[];
   purchaseRequests: PurchaseRequest[];
@@ -57,6 +59,7 @@ function emptyStore(): Store {
     approvals: [],
     reservations: [],
     dayLogs: [],
+    pastSales: [],
     inventory: [],
     purchaseOrders: [],
     purchaseRequests: [],
@@ -68,7 +71,7 @@ function emptyStore(): Store {
 
 // Demo data lives in server memory (kept on globalThis so dev reloads don't wipe it) and resets on restart.
 const g = globalThis as unknown as { __slnStore?: Store; __slnVersion?: number };
-const STORE_VERSION = 15;
+const STORE_VERSION = 18;
 
 export function store(): Store {
   if (!g.__slnStore || g.__slnVersion !== STORE_VERSION) {

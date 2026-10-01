@@ -41,27 +41,11 @@ export const BLEND_HINTS = { PURE: "100% coffee", CHICORY: "Mixed with chicory r
 export function coffeeShare(blend: string, chicoryPct: number): number {
   return blend === "CHICORY" ? 1 - chicoryPct / 100 : 1;
 }
-export const CONTAINER_SIZES = { "20": "20 ft", "40": "40 ft" } as const;
-// Tonnes one container carries, by pack and size (indicative, kept in settings).
-export function containerTonnes(s: Record<string, number>, pack: string, size: string): number {
-  return s[`container.${pack}.${size}`] ?? (size === "40" ? 20 : 10);
-}
-export function shipmentTonnes(s: Record<string, number>, pack: string, shipments: { month: string; size: string; containers: number }[]): Record<string, number> {
+// Tonnes per ship month for an order's shipments.
+export function shipmentTonnes(shipments: { month: string; quantityMt: number }[]): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const sh of shipments) out[sh.month] = Math.round(((out[sh.month] ?? 0) + sh.containers * containerTonnes(s, pack, sh.size)) * 10) / 10;
+  for (const sh of shipments) out[sh.month] = Math.round(((out[sh.month] ?? 0) + sh.quantityMt) * 10) / 10;
   return out;
-}
-
-// "3 × 40 ft" style summary of an order's containers (sizes grouped).
-export function containerSummary(shipments: { size: string; containers: number }[] | undefined): string {
-  if (!shipments?.length) return "–";
-  const by: Record<string, number> = {};
-  for (const s of shipments) by[s.size] = (by[s.size] ?? 0) + s.containers;
-  return Object.entries(by)
-    .sort(([a], [b]) => Number(b) - Number(a))
-    .filter(([, n]) => n > 0)
-    .map(([size, n]) => `${n} × ${size} ft`)
-    .join(", ");
 }
 
 export const PACK_FORMATS = { BULK: "Bulk bags", GLASS: "Glass jars", CAN: "Cans" } as const;

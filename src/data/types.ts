@@ -31,9 +31,11 @@ export type Sku = {
 
 export type Setting = { key: string; value: number; label: string; unit: string; grp: string; sort: number };
 
-// Export business: an order is supplied in containers. One shipment = N containers of one size in a ship month.
-export type ContainerSize = "20" | "40";
-export type Shipment = { month: string; size: ContainerSize; containers: number };
+// A past sale to a customer (history for pricing). In the real system this comes from D365 invoices.
+export type PastSale = { id: number; customerId: number; date: string; productType: string; blend: string; packFormat: string; quantityMt: number; pricePerKg: number; currency: string };
+
+// An order ships in one or more lots: tonnes in a ship month.
+export type Shipment = { month: string; quantityMt: number };
 
 export type Order = {
   id: number;
