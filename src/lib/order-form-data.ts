@@ -50,7 +50,7 @@ export function blankWizard(viewer: Viewer, prefill: { product?: string; from?: 
     advancePct: 0,
     creditDays: 30,
     paymentMode: "Open account",
-    currency: "USD",
+    currency: "INR",
     specNotes: "",
     spillOverride: "",
   };

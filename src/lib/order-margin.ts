@@ -25,8 +25,8 @@ export function lineMarginFor(ol: OrderLine, order: Order, s: Settings): MarginR
   );
 }
 
-// Indicative export prices for a product with no orders yet (USD per kg, bulk).
-const TYPICAL_USD_PER_KG: Record<string, number> = { SD: 16.5, AG: 18, FDC: 28 };
+// Indicative prices for a product with no orders yet (₹ per kg, bulk).
+const TYPICAL_INR_PER_KG: Record<string, number> = { SD: 1450, AG: 1580, FDC: 2460 };
 
 // Average profit per kg for each product, weighted by tonnes, across approved and waiting orders.
 // Used to put a rupee value on line capacity. Falls back to a typical bulk order when a product has none.
@@ -51,7 +51,7 @@ export function avgMarginPerKgByProduct(s: Settings): Record<string, { perKg: nu
     if (a && a.qty > 0) out[pt] = { perKg: a.margin / (a.qty * 1000), pct: a.revenue ? (a.margin / a.revenue) * 100 : 0, fromOrders: true };
     else {
       const m = computeMargin(
-        { sku: { productType: pt, blend: "PURE", packFormat: "BULK", coffeeShare: 1 }, quantityMt: 1, pricePerKg: TYPICAL_USD_PER_KG[pt] ?? 16.5, currency: "USD", beanOrigin: "VIETNAM", gbClosedPrice: null, freightBasis: "BUYER", advancePct: 0, creditDays: 30 },
+        { sku: { productType: pt, blend: "PURE", packFormat: "BULK", coffeeShare: 1 }, quantityMt: 1, pricePerKg: TYPICAL_INR_PER_KG[pt] ?? 1450, currency: "INR", beanOrigin: "VIETNAM", gbClosedPrice: null, freightBasis: "BUYER", advancePct: 0, creditDays: 30 },
         s,
       );
       out[pt] = { perKg: m.marginPerKg, pct: m.marginPct, fromOrders: false };
