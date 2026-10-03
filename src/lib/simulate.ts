@@ -1,6 +1,6 @@
 import { store } from "@/data/store";
-import { capacityAt, freeAt, loadCapacityState, LOADING_STATUSES, planHorizon, productFreeAt } from "./capacity";
-import { addMonths, monthLabel, productLabel } from "./domain";
+import { capacityAt, freeAt, loadCapacityState, LOADING_STATUSES, planHorizon, productFreeAt, type CapacityState } from "./capacity";
+import { addMonths, monthLabel, productLabel, PRODUCT_TYPES } from "./domain";
 import { avgMarginPerKgByProduct, lineMarginFor } from "./order-margin";
 import { planSuggestions } from "./recommend";
 import { loadSettings } from "./settings";
@@ -11,10 +11,10 @@ import { loadSettings } from "./settings";
 export type LineStopRow = { orderId: number; ref: string; customer: string; product: string; qty: number; status: string; outcome: "move" | "late" | "partial" | "risk"; to: string; riskMt: number; revenue: number | null };
 export type LineStopResult = { line: string; month: string; capacityLost: number; freeLost: number; rows: LineStopRow[]; affectedMt: number; movedMt: number; lateMt: number; riskMt: number; revenueAtRisk: number };
 
-export function simulateLineStop(lineId: number, month: string): LineStopResult | null {
+export function simulateLineStop(lineId: number, month: string, given?: CapacityState): LineStopResult | null {
   const st = store();
   const s = loadSettings();
-  const state = loadCapacityState();
+  const state = given ?? loadCapacityState();
   const line = state.lines.find((l) => l.id === lineId);
   if (!line) return null;
   // Room already given to an earlier order in this run, so two orders never take the same space.
@@ -152,4 +152,57 @@ export function simulateCapacity(lineId: number, productType: string, extraMt: n
     })
     .map((x) => ({ ref: x.ref, customer: x.customer, product: x.product, slotMt: x.slotMt, month: x.deliveryMonth }));
   return { line: line.code, productType, extraMt, makesToday, months, profitPerMonth: extraMt * 1000 * margin.perKg, marginPerKg: margin.perKg, fromOrders: margin.fromOrders, placeable };
+}
+
+// Everything the What-if playground needs, precomputed so sliders update instantly in the browser.
+export type PlaygroundData = {
+  lines: { id: number; code: string; productTypes: string[] }[];
+  months: string[];
+  lineStop: Record<string, LineStopResult>;
+  bean: { target: number; rows: { key: string; orderId: number; ref: string; customer: string; product: string; qty: number; fixed: boolean; priceKg: number; costKg: number; beanKg: number }[] };
+  capacity: { freeNow: Record<string, number>; perKg: Record<string, { perKg: number; fromOrders: boolean }>; waiting: { ref: string; customer: string; product: string; productType: string; slotMt: number; month: string }[] };
+};
+
+export function playgroundData(): PlaygroundData {
+  const st = store();
+  const s = loadSettings();
+  const state = loadCapacityState();
+  const months = planHorizon(12);
+  const lines = state.lines.map((l) => ({ id: l.id, code: l.code, productTypes: l.productTypes }));
+
+  const lineStop: Record<string, LineStopResult> = {};
+  for (const l of lines) for (const m of months) lineStop[`${l.id}|${m}`] = simulateLineStop(l.id, m, state)!;
+
+  // Bean cost per kg of product, so the browser can re-price margins for any % move.
+  const rows = st.orders
+    .filter((o) => LOADING_STATUSES.includes(o.status))
+    .flatMap((o) =>
+      st.orderLines
+        .filter((l) => l.orderId === o.id)
+        .map((ol) => {
+          const sku = st.skus.find((x) => x.id === ol.skuId)!;
+          const m = lineMarginFor(ol, o, s)!;
+          return {
+            key: `${o.id}-${ol.id}`,
+            orderId: o.id,
+            ref: o.ref,
+            customer: st.customers.find((c) => c.id === o.customerId)?.name ?? "",
+            product: productLabel(sku, ol.chicoryPct),
+            qty: ol.quantityMt,
+            fixed: o.gbPriceClosed,
+            priceKg: m.priceInrPerKg,
+            costKg: m.costPerKg,
+            beanKg: (m.greenBeanKg * m.beanPricePerKg) / (ol.quantityMt * 1000),
+          };
+        }),
+    );
+
+  const freeNow: Record<string, number> = {};
+  for (const l of state.lines) for (const pt of Object.keys(PRODUCT_TYPES)) for (const m of months) freeNow[`${l.id}|${pt}|${m}`] = l.productTypes.includes(pt) ? Math.max(0, productFreeAt(state, l.id, pt, m)) : 0;
+  const perKg = Object.fromEntries(Object.entries(avgMarginPerKgByProduct(s)).map(([k, v]) => [k, { perKg: v.perKg, fromOrders: v.fromOrders }]));
+  const waiting = planSuggestions()
+    .filter((x) => !x.keep)
+    .map((x) => ({ ref: x.ref, customer: x.customer, product: x.product, productType: x.productType, slotMt: x.slotMt, month: x.deliveryMonth }));
+
+  return { lines, months, lineStop, bean: { target: s["margin.target_pct"], rows }, capacity: { freeNow, perKg, waiting } };
 }
