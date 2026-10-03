@@ -1,5 +1,5 @@
 import { store } from "@/data/store";
-import { capacityAt, freeAt, loadCapacityState, LOADING_STATUSES, planHorizon, productFreeAt, type CapacityState } from "./capacity";
+import { capacityAt, freeAt, loadCapacityState, LOADING_STATUSES, planHorizon, productFreeAt, productLoadAt, type CapacityState } from "./capacity";
 import { addMonths, monthLabel, productLabel, PRODUCT_TYPES } from "./domain";
 import { avgMarginPerKgByProduct, lineMarginFor } from "./order-margin";
 import { planSuggestions } from "./recommend";
@@ -161,6 +161,8 @@ export type PlaygroundData = {
   lineStop: Record<string, LineStopResult>;
   bean: { target: number; rows: { key: string; orderId: number; ref: string; customer: string; product: string; qty: number; fixed: boolean; priceKg: number; costKg: number; beanKg: number }[] };
   capacity: { freeNow: Record<string, number>; perKg: Record<string, { perKg: number; fromOrders: boolean }>; waiting: { ref: string; customer: string; product: string; productType: string; slotMt: number; month: string }[] };
+  // Line setup today and the planned load per line, product and month, so a changed setup can be checked in the browser.
+  setup: { caps: Record<string, Record<string, number>>; load: Record<string, number> };
 };
 
 export function playgroundData(): PlaygroundData {
@@ -204,5 +206,12 @@ export function playgroundData(): PlaygroundData {
     .filter((x) => !x.keep)
     .map((x) => ({ ref: x.ref, customer: x.customer, product: x.product, productType: x.productType, slotMt: x.slotMt, month: x.deliveryMonth }));
 
-  return { lines, months, lineStop, bean: { target: s["margin.target_pct"], rows }, capacity: { freeNow, perKg, waiting } };
+  const caps: Record<string, Record<string, number>> = {};
+  const load: Record<string, number> = {};
+  for (const l of state.lines) {
+    caps[l.id] = Object.fromEntries(Object.keys(PRODUCT_TYPES).map((pt) => [pt, l.productTypes.includes(pt) ? Math.round(l.productCaps[pt] ?? 0) : 0]));
+    for (const pt of Object.keys(PRODUCT_TYPES)) for (const m of months) load[`${l.id}|${pt}|${m}`] = productLoadAt(state, l.id, pt, m);
+  }
+
+  return { lines, months, lineStop, bean: { target: s["margin.target_pct"], rows }, capacity: { freeNow, perKg, waiting }, setup: { caps, load } };
 }

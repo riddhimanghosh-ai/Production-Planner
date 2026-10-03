@@ -6,12 +6,13 @@ import { formatInr, monthLabel, PRODUCT_TYPES } from "@/lib/domain";
 import type { LineStopResult, PlaygroundData } from "@/lib/simulate";
 import { cx } from "./ui";
 
-type Sim = "line" | "bean" | "capacity";
+type Sim = "line" | "bean" | "capacity" | "setup";
 
 const SCENARIOS: { key: Sim; title: string; blurb: string }[] = [
   { key: "line", title: "A line stops", blurb: "Breakdown or long maintenance for a month" },
   { key: "bean", title: "Bean price moves", blurb: "Green beans get dearer or cheaper" },
   { key: "capacity", title: "More capacity", blurb: "A line gets extra room for one product" },
+  { key: "setup", title: "Change line setup", blurb: "Re-split every line between products" },
 ];
 
 // The What-if playground. Rounded cards and sliders, by request; everything updates as you drag.
@@ -20,7 +21,7 @@ export function WhatIfPlayground({ data }: { data: PlaygroundData }) {
   const [sim, setSim] = useState<Sim>("line");
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {SCENARIOS.map((s) => (
           <button
             key={s.key}
@@ -36,6 +37,7 @@ export function WhatIfPlayground({ data }: { data: PlaygroundData }) {
       {sim === "line" && <LineStop data={data} />}
       {sim === "bean" && <Bean data={data} />}
       {sim === "capacity" && <Capacity data={data} />}
+      {sim === "setup" && <Setup data={data} />}
       <p className="text-[12px] text-stone-500">A playground: it reads the live plan and changes nothing. Make a change real from the calendar, Line setup or Inventory.</p>
     </div>
   );
@@ -338,6 +340,127 @@ function Capacity({ data }: { data: PlaygroundData }) {
           ))}
         </div>
       </Panel>
+    </div>
+  );
+}
+
+// 4. Change line setup: slide each product's share on every line and see what still fits and what it earns.
+function Setup({ data }: { data: PlaygroundData }) {
+  const pts = Object.keys(PRODUCT_TYPES);
+  const [caps, setCaps] = useState<Record<string, Record<string, number>>>(() => JSON.parse(JSON.stringify(data.setup.caps)));
+  const today = data.setup.caps;
+  const set = (lineId: number, pt: string, v: number) => setCaps((c) => ({ ...c, [lineId]: { ...c[lineId], [pt]: v } }));
+  const total = (c: Record<string, Record<string, number>>, pt?: string) => data.lines.reduce((a, l) => a + pts.filter((p) => !pt || p === pt).reduce((b, p) => b + (c[l.id]?.[p] ?? 0), 0), 0);
+  const profit = (c: Record<string, Record<string, number>>) => data.lines.reduce((a, l) => a + pts.reduce((b, p) => b + (c[l.id]?.[p] ?? 0) * 1000 * (data.capacity.perKg[p]?.perKg ?? 0), 0), 0);
+
+  // Orders already planned: do they still fit the new split, month by month?
+  let overMt = 0;
+  const overCells: { line: string; product: string; month: string; over: number }[] = [];
+  for (const l of data.lines)
+    for (const p of pts)
+      for (const m of data.months) {
+        const over = (data.setup.load[`${l.id}|${p}|${m}`] ?? 0) - (caps[l.id]?.[p] ?? 0);
+        if (over > 0.05) {
+          overMt += over;
+          overCells.push({ line: l.code, product: PRODUCT_TYPES[p as keyof typeof PRODUCT_TYPES], month: m, over });
+        }
+      }
+  // Waiting orders that fit now but did not before.
+  const roomFor = (c: Record<string, Record<string, number>>, w: PlaygroundData["capacity"]["waiting"][number]) =>
+    data.lines.some((l) => (c[l.id]?.[w.productType] ?? 0) - (data.setup.load[`${l.id}|${w.productType}|${w.month}`] ?? 0) >= w.slotMt - 0.05);
+  const fits = data.capacity.waiting.filter((w) => roomFor(caps, w) && !roomFor(today, w));
+  const changed = JSON.stringify(caps) !== JSON.stringify(today);
+  const dTotal = total(caps) - total(today);
+  const dProfit = profit(caps) - profit(today);
+  const added = data.lines.flatMap((l) => pts.filter((p) => (caps[l.id]?.[p] ?? 0) > 0 && (today[l.id]?.[p] ?? 0) === 0).map((p) => `${PRODUCT_TYPES[p as keyof typeof PRODUCT_TYPES].toLowerCase()} on ${l.code}`));
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Big label="Capacity a month" value={t(total(caps))} hint={changed ? `${dTotal >= 0 ? "+" : ""}${t(dTotal)} vs today, ${t(total(today))}` : "Today's setup"} tone={dTotal > 0 ? "green" : dTotal < 0 ? "red" : undefined} />
+        <Big
+          label="Profit a month at full load"
+          value={formatInr(profit(caps))}
+          hint={changed ? `${dProfit >= 0 ? "+" : ""}${formatInr(dProfit)} vs today` : `Today ${formatInr(profit(today))}`}
+          tone={dProfit > 0 ? "green" : dProfit < 0 ? "red" : undefined}
+        />
+        <Big label="Planned orders that no longer fit" value={t(overMt)} hint={overMt > 0 ? `${overCells.length} line-month${overCells.length === 1 ? "" : "s"} overbooked` : "Everything planned still fits"} tone={overMt > 0 ? "red" : "green"} />
+        <Big label="Waiting orders that now fit" value={fits.length} hint={fits.length ? fits.map((f) => `${f.customer}, ${f.slotMt} t`).join("; ") : "No new ones"} tone={fits.length ? "green" : undefined} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {data.lines.map((l) => {
+          const lineTotal = pts.reduce((a, p) => a + (caps[l.id]?.[p] ?? 0), 0);
+          const lineToday = pts.reduce((a, p) => a + (today[l.id]?.[p] ?? 0), 0);
+          return (
+            <Panel key={l.id}>
+              <div className="mb-3 flex items-baseline justify-between">
+                <div className="text-[15px] font-semibold">{l.code}</div>
+                <div className="tabular text-[13px] text-stone-500">
+                  <span className="font-semibold text-stone-900">{t(lineTotal)}</span> a month{lineTotal !== lineToday && <span className="ml-1.5 text-stone-400">(today {t(lineToday)})</span>}
+                </div>
+              </div>
+              <div className="space-y-3">
+                {pts.map((p) => {
+                  const v = caps[l.id]?.[p] ?? 0;
+                  const was = today[l.id]?.[p] ?? 0;
+                  const maxLoad = Math.max(0, ...data.months.map((m) => data.setup.load[`${l.id}|${p}|${m}`] ?? 0));
+                  return (
+                    <div key={p} className="grid grid-cols-[110px_1fr_64px] items-center gap-3">
+                      <div className={cx("text-[13px]", v === 0 ? "text-stone-400" : "text-stone-900")}>{PRODUCT_TYPES[p as keyof typeof PRODUCT_TYPES]}</div>
+                      <div className="relative">
+                        <input
+                          type="range"
+                          min={0}
+                          max={60}
+                          step={5}
+                          value={v}
+                          onChange={(e) => set(l.id, p, Number(e.target.value))}
+                          className="w-full accent-brand-600"
+                          aria-label={`${l.code} ${PRODUCT_TYPES[p as keyof typeof PRODUCT_TYPES]} tonnes a month`}
+                        />
+                        {maxLoad > 0 && <div className="pointer-events-none absolute -bottom-1 h-1 w-px bg-red-600" style={{ left: `${Math.min(100, (maxLoad / 60) * 100)}%` }} title={`Busiest month has ${t(maxLoad)} planned`} />}
+                      </div>
+                      <div className={cx("tabular text-right text-[13px] font-semibold", v < maxLoad - 0.05 ? "text-red-700" : v !== was ? "text-brand-600" : "text-stone-900")}>{t(v)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Panel>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setCaps(JSON.parse(JSON.stringify(today)))}
+          disabled={!changed}
+          className="h-8 rounded-full border border-stone-300 bg-white px-3 text-[13px] font-medium text-stone-700 hover:border-stone-900 disabled:opacity-40"
+        >
+          Reset to today
+        </button>
+        <Link href="/capacity" className="h-8 rounded-full border border-stone-900 bg-stone-900 px-3 text-[13px] font-medium leading-8 text-white hover:bg-brand-600 hover:border-brand-600">
+          Make it real in Line setup
+        </Link>
+        <span className="text-[12px] text-stone-500">The small red mark under a slider is the busiest planned month for that product; below it, planned orders stop fitting.</span>
+      </div>
+      {added.length > 0 && <Panel className="border-l-4 border-l-stone-900 text-[13px]">New on a line: {added.join(", ")}. Check the equipment can make it, and expect changeover time when two products run in one month.</Panel>}
+      {overCells.length > 0 && (
+        <Panel className="p-0">
+          <div className="border-b border-stone-200 px-4 py-2.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-700">Where planned orders no longer fit</div>
+          <div className="divide-y divide-stone-200">
+            {overCells.slice(0, 12).map((c) => (
+              <div key={`${c.line}-${c.product}-${c.month}`} className="grid grid-cols-[60px_1fr_auto] gap-3 px-4 py-2 text-[13px]">
+                <span className="font-semibold">{c.line}</span>
+                <span className="text-stone-600">
+                  {c.product}, {monthLabel(c.month)}
+                </span>
+                <span className="tabular font-semibold text-red-700">{t(c.over)} over</span>
+              </div>
+            ))}
+            {overCells.length > 12 && <div className="px-4 py-2 text-[12px] text-stone-500">and {overCells.length - 12} more</div>}
+          </div>
+        </Panel>
+      )}
     </div>
   );
 }
