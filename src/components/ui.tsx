@@ -134,7 +134,8 @@ export function buttonClass(variant: "primary" | "secondary" | "danger" = "prima
   );
 }
 
-export function Tabs({ tabs, active }: { tabs: { href: string; label: string; key: string; count?: number }[]; active: string }) {
+// `tag` marks a tab as outside the core scope, e.g. "Good to have".
+export function Tabs({ tabs, active }: { tabs: { href: string; label: string; key: string; count?: number; tag?: string }[]; active: string }) {
   return (
     <div className="-mx-4 mb-4 flex gap-6 overflow-x-auto border-b border-stone-300 px-4 md:mx-0 md:mb-5 md:px-0">
       {tabs.map((t) => (
@@ -148,6 +149,7 @@ export function Tabs({ tabs, active }: { tabs: { href: string; label: string; ke
         >
           {t.label}
           {!!t.count && <span className={cx("font-mono text-[11px] font-medium", t.key === active ? "text-brand-600" : "text-stone-500")}>{t.count}</span>}
+          {t.tag && <span className="font-mono text-[9px] font-normal uppercase tracking-[0.12em] text-stone-400">{t.tag}</span>}
         </Link>
       ))}
     </div>

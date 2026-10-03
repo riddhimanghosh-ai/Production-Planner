@@ -11,8 +11,8 @@ export function PlanningTabs({ active, toPlace }: { active: PlanningTab; toPlace
         { key: "calendar", href: "/plan", label: "Calendar" },
         { key: "new", href: "/plan?tab=new", label: "New orders", count: toPlace },
         { key: "done", href: "/plan?tab=done", label: "Production done" },
-        { key: "quality", href: "/plan?tab=quality", label: "Line quality" },
-        { key: "whatif", href: "/plan?tab=whatif", label: "What if" },
+        { key: "quality", href: "/plan?tab=quality", label: "Line quality", tag: "Good to have" },
+        { key: "whatif", href: "/plan?tab=whatif", label: "What if", tag: "Good to have" },
         { key: "setup", href: "/capacity", label: "Line setup" },
       ]}
     />
