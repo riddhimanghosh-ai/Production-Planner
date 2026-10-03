@@ -311,46 +311,44 @@ const eyebrow = "mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.
 
 // The COO's full availability check: line space by ship month, ways to make it fit, and materials against stock and lead time.
 function CooCheck({ feas }: { feas: Feasibility }) {
-  const lineCodes = feas.perMonth[0]?.lines.map((l) => l.code) ?? [];
   return (
     <div className="space-y-5">
       <section>
         <div className={eyebrow}>1 · Line space in the ship month</div>
-        <div className="overflow-x-auto border border-stone-300 bg-white">
-          <table className="tabular w-full min-w-[720px] text-[13px]">
-            <thead>
-              <tr>
-                <th className={tbl.th}>Ship month</th>
-                <th className={tbl.thR}>Needed</th>
-                {lineCodes.map((c) => (
-                  <th key={c} className={tbl.thR}>
-                    {c} free → use
-                  </th>
-                ))}
-                <th className={tbl.th}>Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {feas.perMonth.map((m) => (
-                <tr key={m.month} className={cx(tbl.tr, m.short > 0.05 && "bg-red-50/50")}>
-                  <td className={tbl.td}>{monthLabel(m.month)}</td>
-                  <td className={tbl.tdR}>{m.need} t</td>
-                  {m.lines.map((l) => (
-                    <td key={l.code} className={tbl.tdR}>
-                      <span className="text-stone-500">{l.free} t</span> <span className="text-stone-300">→</span> <b className={l.take ? "text-stone-900" : "text-stone-300"}>{l.take ? `${l.take} t` : "–"}</b>
-                      {l.freeTotal > l.free + 0.05 && <div className="text-[10px] text-stone-400">{l.freeTotal} t free on the whole line</div>}
-                    </td>
-                  ))}
-                  <td className={cx(tbl.td, "whitespace-nowrap font-semibold", m.short > 0.05 ? "text-red-700" : "text-emerald-700")}>
-                    {m.short > 0.05 ? `Short ${m.short} t` : "✓ Fits"}
-                    {m.fitsWithMix && <div className="text-[11px] font-normal text-stone-700">Fits if a line&apos;s product split changes</div>}
-                  </td>
+        {feas.perMonth.map((m) => (
+          <div key={m.month} className="overflow-x-auto border border-stone-300 bg-white">
+            <table className="tabular w-full min-w-[640px] text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tbl.th}>Line ({monthLabel(m.month)})</th>
+                  <th className={tbl.thR}>Free for {feas.product}</th>
+                  <th className={tbl.thR}>Free on the whole line</th>
+                  <th className={tbl.thR}>Planned here</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-1 text-[12px] text-stone-500">Free is this product&apos;s share of each line (Line setup), after every other booked and waiting order.</p>
+              </thead>
+              <tbody>
+                {m.lines.map((l) => (
+                  <tr key={l.code} className={tbl.tr}>
+                    <td className={cx(tbl.td, "font-medium")}>{l.code}</td>
+                    <td className={cx(tbl.tdR, l.free < 0.05 && "text-stone-400")}>{l.free} t</td>
+                    <td className={cx(tbl.tdR, "text-stone-500")}>{l.freeTotal} t</td>
+                    <td className={cx(tbl.tdR, l.take ? "font-semibold text-stone-900" : "text-stone-300")}>{l.take ? `${l.take} t` : "–"}</td>
+                  </tr>
+                ))}
+                <tr className={cx("font-semibold", m.short > 0.05 ? "bg-red-50" : "bg-emerald-50")}>
+                  <td className={tbl.td}>Needed {m.need} t</td>
+                  <td className={tbl.tdR}>{Math.round(m.lines.reduce((a, l) => a + l.free, 0) * 10) / 10} t</td>
+                  <td className={tbl.tdR}>{Math.round(m.lines.reduce((a, l) => a + l.freeTotal, 0) * 10) / 10} t</td>
+                  <td className={cx(tbl.tdR, m.short > 0.05 ? "text-red-700" : "text-emerald-700")}>{m.short > 0.05 ? `Short ${m.short} t` : "✓ Fits"}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ))}
+        <p className="mt-1 text-[12px] text-stone-500">
+          <b>Free for {feas.product}</b>: what is left of the {feas.product.toLowerCase()} share set in Line setup, after all other orders. <b>Free on the whole line</b>: what is left if the line&apos;s split between products were changed.
+          {feas.perMonth.some((m) => m.fitsWithMix) && " This order would fit if a line's split were changed."}
+        </p>
       </section>
 
       {!feas.line.ok && (

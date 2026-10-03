@@ -1,5 +1,5 @@
 import { store } from "@/data/store";
-import { monthLabel, monthStartDate, ORIGINS, shipmentTonnes, type Origin } from "./domain";
+import { monthLabel, monthStartDate, ORIGINS, PRODUCT_TYPES, shipmentTonnes, type Origin, type ProductType } from "./domain";
 import { shortages, type Shortage } from "./inventory";
 import type { Order, OrderLine } from "@/data/types";
 import { freeAt, loadCapacityState } from "./capacity";
@@ -14,6 +14,7 @@ import { planAvailability } from "./workflow";
 export type Feasibility = {
   verdict: "ok" | "buy" | "no";
   headline: string;
+  product: string;
   line: { ok: boolean; short: { month: string; short: number }[] };
   materials: { name: string; unit: string; month: string; short: number; orderBy: Date; earliest: string; canArrive: boolean; late: boolean; leadDays: number }[];
   // Detail for the COO check tab.
@@ -79,7 +80,7 @@ export function orderFeasibility(orderId: number, shorts: Shortage[] = shortages
         : lineShort.length
           ? `Not feasible: no line space in ${lineShort.map((m) => monthLabel(m.month)).join(", ")}`
           : `Not feasible: ${blocked[0].name} can't arrive before ${monthLabel(blocked[0].earliest)}`;
-  return { verdict, headline, line: { ok: !lineShort.length, short: lineShort }, materials, perMonth, suggestion: avail.suggestion, bean: beanCheck(order, lines) };
+  return { verdict, headline, product: PRODUCT_TYPES[sku.productType as ProductType] ?? sku.productType, line: { ok: !lineShort.length, short: lineShort }, materials, perMonth, suggestion: avail.suggestion, bean: beanCheck(order, lines) };
 }
 
 function beanCheck(order: Order, lines: OrderLine[]): Feasibility["bean"] {
