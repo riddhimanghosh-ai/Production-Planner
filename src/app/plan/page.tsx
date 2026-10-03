@@ -6,10 +6,10 @@ import { TodayTasks, type Task } from "@/components/today-tasks";
 import { defaultAlerts, lineReadings } from "@/lib/quality";
 import { ProductionLog, type MonthTally, type ProductionRow } from "@/components/production-log";
 import { PlanSuggestions } from "@/components/plan-suggestions";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, type StatItem } from "@/components/ui";
 import { store } from "@/data/store";
 import { capacityAt, changeoverAt, freeAt, loadAt, loadCapacityState, noteAt, planHorizon, reservedAt } from "@/lib/capacity";
-import { can, productLabel, todayIso, addMonths } from "@/lib/domain";
+import { can, productLabel, todayIso, addMonths, monthLabel } from "@/lib/domain";
 import { inventoryProjection, shortages } from "@/lib/inventory";
 import { requirementsFor } from "@/lib/procurement";
 import { getViewer } from "@/lib/role";
@@ -104,9 +104,24 @@ export default async function PlanPage({ searchParams }: PageProps<"/plan">) {
     }
   }
 
+  // Key numbers for the header: this month's load, room ahead, orders still to place, materials short.
+  const sum = (f: (lineId: number, m: string) => number, ms: string[]) => Math.round(state.lines.reduce((a, l) => a + ms.reduce((b, m) => b + f(l.id, m), 0), 0));
+  // The first month with something planned on it (the demo data starts a little ahead of today).
+  const m0 = months.find((m) => sum((id, mm) => loadAt(state, id, mm), [m]) > 0) ?? months[0];
+  const planned = sum((id, m) => loadAt(state, id, m), [m0]);
+  const cap = sum((id, m) => capacityAt(state, id, m), [m0]);
+  const free3 = sum((id, m) => Math.max(0, freeAt(state, id, m)), months.slice(0, 3));
+  const shortCount = new Set(shortages(projection).map((x) => x.key)).size;
+  const stats: StatItem[] = [
+    { label: `Planned, ${monthLabel(m0, false)}`, value: `${planned} t`, hint: `of ${cap} t capacity on ${state.lines.length} lines` },
+    { label: "Free, 3 months", value: `${free3} t`, hint: `Room left to sell, ${monthLabel(months[0], false)} to ${monthLabel(months[2], false)}` },
+    { label: "Orders to place", value: toPlace, hint: toPlace ? "Waiting for a line" : "All placed" },
+    { label: "Materials short", value: shortCount, hint: shortCount ? "See Inventory" : "Plan is covered", tone: shortCount ? "red" : "green" },
+  ];
+
   return (
     <>
-      <PageHeader eyebrow="02 / Production" title="Production" emph="calendar" subtitle="Four lines, month by month. Click a box to see its orders." />
+      <PageHeader eyebrow="02 / Production" title="Production" emph="calendar" subtitle="Four lines, month by month. Click a box to see its orders." stats={stats} />
       <PlanningTabs active={active} toPlace={toPlace} />
       {active === "new" && (
         <PlanSuggestions

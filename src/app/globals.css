@@ -113,3 +113,35 @@ body {
     font-family: var(--font-serif);
   }
 }
+
+/* Form controls share one size everywhere: 32px tall, hairline border, accent on focus. Utilities still win. */
+@layer base {
+  main input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="range"]),
+  main select,
+  main textarea {
+    min-height: 32px;
+    border: 1px solid var(--color-stone-300);
+    background: #ffffff;
+    padding-inline: 8px;
+    font-size: 13px;
+    color: var(--color-stone-900);
+    outline: none;
+  }
+  main table input:not([type="checkbox"]),
+  main table select {
+    min-height: 28px;
+  }
+  main input:focus,
+  main select:focus,
+  main textarea:focus {
+    border-color: var(--color-brand-600);
+  }
+  main input::placeholder,
+  main textarea::placeholder {
+    color: var(--color-stone-400);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 1px;
+  }
+}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { QuickDecision } from "@/components/approval-actions";
 import { ExportButton } from "@/components/export-button";
-import { ButtonLink, cx, Empty, PageHeader, Pager, StatusBadge, Tabs, tbl } from "@/components/ui";
+import { Badge, ButtonLink, cx, Empty, PageHeader, Pager, Segmented, StatusBadge, Tabs, tbl, type StatItem, type Tone } from "@/components/ui";
 import { can, formatInr, monthLabel, ORDER_STATUS, productLabel, type OrderStatus } from "@/lib/domain";
 import { shortages } from "@/lib/inventory";
 import { Sellable } from "@/components/sellable";
@@ -26,26 +26,15 @@ function ApprovalTags({ v }: { v: OrderView }) {
   const st = v.order.status;
   if (st === "DRAFT") return <span className="text-[12px] text-stone-400">Not sent</span>;
   return (
-    <div className="flex gap-1">
+    <div className="flex gap-2.5">
       {(["CFO", "COO"] as const).map((role) => {
         const raw = v.approvals.find((x) => x.role === role)?.status;
         // A pending review on an order that is no longer waiting was never reached — show it as empty.
         const a = raw === "PENDING" && st !== "PENDING_APPROVAL" ? undefined : raw;
-        const [icon, cls] =
-          a === "APPROVED"
-            ? ["✓", "border-emerald-200 bg-emerald-50 text-emerald-800"]
-            : a === "PENDING"
-              ? ["…", "border-amber-200 bg-amber-50 text-amber-800"]
-              : a
-                ? ["✕", "border-red-200 bg-red-50 text-red-800"]
-                : ["–", "border-stone-200 bg-stone-50 text-stone-400"];
+        const [icon, cls] = a === "APPROVED" ? ["✓", "text-emerald-700"] : a === "PENDING" ? ["…", "text-stone-900"] : a ? ["✕", "text-red-700"] : ["–", "text-stone-400"];
         return (
-          <span
-            key={role}
-            className={cx("whitespace-nowrap rounded-sm border px-1.5 py-px text-[11px] font-semibold", cls)}
-            title={`${role}: ${a === "APPROVED" ? "approved" : a === "PENDING" ? "waiting" : a === "SENT_BACK" ? "sent back" : a === "REJECTED" ? "rejected" : "–"}`}
-          >
-            {role} {icon}
+          <span key={role} className="whitespace-nowrap font-mono text-[11px] text-stone-500" title={`${role}: ${a === "APPROVED" ? "approved" : a === "PENDING" ? "waiting" : a === "SENT_BACK" ? "sent back" : a === "REJECTED" ? "rejected" : "–"}`}>
+            {role} <span className={cx("font-semibold", cls)}>{icon}</span>
           </span>
         );
       })}
@@ -79,6 +68,22 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
   const queue = approvalQueue(viewer);
   const mine = queue.filter((q) => q.waitingOn.some((r) => viewer.role === "ALL" || r === viewer.role));
 
+  // Key numbers for the header: what is waiting, what is approved, and how the approved book is doing on margin.
+  const all = listOrderViews(viewer);
+  const waiting = all.filter((v) => v.order.status === "PENDING_APPROVAL").length;
+  const open = all.filter((v) => !["REJECTED", "CANCELLED"].includes(v.order.status)).length;
+  const approved = all.filter((v) => v.order.status === "COMMITTED");
+  const approvedT = approved.reduce((a, v) => a + v.totalMt, 0);
+  const priced = approved.filter((v) => v.commercials);
+  const avgMargin = priced.length ? priced.reduce((a, v) => a + v.margin.marginPct, 0) / priced.length : null;
+  const target = priced[0]?.margin.targetPct ?? 0;
+  const stats: StatItem[] = [
+    { label: "Waiting for approval", value: waiting, hint: waiting ? "CFO and COO to decide" : "Nothing waiting" },
+    { label: "Approved orders", value: approved.length, hint: `${open} open in total` },
+    { label: "Approved tonnes", value: `${approvedT.toLocaleString("en-IN")} t`, hint: "Line time locked" },
+    { label: "Average margin", value: avgMargin == null ? "–" : `${avgMargin.toFixed(1)}%`, hint: avgMargin == null ? "Hidden for this role" : `Target ${target}%`, tone: avgMargin == null ? undefined : avgMargin < target ? "red" : "green" },
+  ];
+
   return (
     <>
       <PageHeader
@@ -87,6 +92,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/orders">)
         emph="approvals"
         subtitle="The CFO checks the money and the COO checks the factory; both must approve."
         actions={can(viewer.role, ["BD_EXEC", "BD_HEAD"]) ? <ButtonLink href="/orders/new">+ New order</ButtonLink> : undefined}
+        stats={stats}
       />
       <Tabs
         active={tab}
@@ -134,22 +140,26 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
 
   return (
     <>
-      <div className="mb-2 flex flex-wrap items-center gap-1.5">
-        {FILTERS.map((f) => {
-          const count = f.statuses.length ? views.filter((v) => f.statuses.includes(v.order.status)).length : views.length;
-          return (
-            <Link
-              key={f.key}
-              href={`/orders?status=${f.key}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
-              className={cx("rounded-sm border px-2 py-1 text-xs font-medium", filter.key === f.key ? "border-stone-800 bg-stone-800 text-white" : "border-stone-300 bg-white text-stone-700 hover:bg-stone-50")}
-            >
-              {f.label} <span className="opacity-60">{count}</span>
-            </Link>
-          );
-        })}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Segmented
+          active={filter.key}
+          items={FILTERS.map((f) => {
+            const count = f.statuses.length ? views.filter((v) => f.statuses.includes(v.order.status)).length : views.length;
+            return {
+              key: f.key,
+              href: `/orders?status=${f.key}${q ? `&q=${encodeURIComponent(q)}` : ""}`,
+              label: (
+                <>
+                  {f.label}
+                  <span className={cx("font-mono text-[11px]", filter.key === f.key ? "text-white/70" : "text-stone-400")}>{count}</span>
+                </>
+              ),
+            };
+          })}
+        />
         <form className="ml-auto flex items-center gap-2">
           <input type="hidden" name="status" value={filter.key} />
-          <input name="q" defaultValue={q} placeholder="Search customer or order…" className="w-56 rounded-sm border border-stone-300 bg-white px-2 py-1 text-xs" />
+          <input name="q" defaultValue={q} placeholder="Search customer or order" className="w-56" />
         </form>
         <ExportButton filename="sln-orders" rows={exportRows} />
       </div>
@@ -404,14 +414,14 @@ function FeasibilityCell({ f, beanFixed, orderId }: { f: Feasibility; beanFixed:
 
 function Decision({ status }: { status?: string }) {
   if (!status) return null;
-  const map: Record<string, [string, string]> = {
-    PENDING: ["Waiting", "bg-amber-100 text-amber-900"],
-    APPROVED: ["✓ Approved", "bg-emerald-100 text-emerald-800"],
-    SENT_BACK: ["Sent back", "bg-sky-100 text-sky-800"],
-    REJECTED: ["Rejected", "bg-red-100 text-red-800"],
+  const map: Record<string, [string, Tone]> = {
+    PENDING: ["Waiting", "amber"],
+    APPROVED: ["Approved", "green"],
+    SENT_BACK: ["Sent back", "blue"],
+    REJECTED: ["Rejected", "red"],
   };
-  const [label, cls] = map[status] ?? [status, ""];
-  return <span className={cx("whitespace-nowrap rounded-sm px-1.5 py-px text-[11px] font-semibold", cls)}>{label}</span>;
+  const [label, tone] = map[status] ?? [status, "neutral"];
+  return <Badge tone={tone}>{label}</Badge>;
 }
 
 function SellTab({ canCreate, view }: { canCreate: boolean; view: "product" | "code" | "pack" }) {

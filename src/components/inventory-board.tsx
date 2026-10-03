@@ -5,7 +5,7 @@ import { Fragment, useActionState, useState, useTransition, type ReactNode } fro
 import { dismissRequestAction, gbClosureAction, purchaseOrderAction, receiveAction, saveBeanPrices } from "@/app/actions";
 import { currentMonth, monthLabel, ORIGINS, type Origin } from "@/lib/domain";
 import { ExportButton } from "./export-button";
-import { buttonClass, Card, cx, tbl } from "./ui";
+import { buttonClass, Card, cx, Segmented, tbl } from "./ui";
 
 type Row = {
   key: string;
@@ -114,12 +114,12 @@ export function InventoryBoard({
             type="button"
             onClick={() => setTab(key)}
             className={cx(
-              "-mb-px mr-5 flex items-center gap-1.5 whitespace-nowrap border-b-2 py-2 text-[14px] font-semibold transition-colors",
+              "-mb-px mr-6 flex items-center gap-1.5 whitespace-nowrap border-b-2 pb-2.5 pt-1 text-[13px] font-semibold transition-colors",
               tab === key ? "border-brand-600 text-stone-900" : "border-transparent text-stone-500 hover:text-stone-900",
             )}
           >
             {label}
-            <span className={cx("rounded-sm px-1.5 text-[11px] font-semibold", tone === "red" ? "bg-red-600 text-white" : tone === "amber" ? "bg-stone-900 text-white" : "bg-stone-200 text-stone-700")}>{count}</span>
+            <span className={cx("font-mono text-[11px] font-medium", tone === "red" ? "text-red-700" : tab === key ? "text-brand-600" : "text-stone-500")}>{count}</span>
           </button>
         ))}
       </div>
@@ -231,18 +231,14 @@ function StockGrid({ months, shown, rows, nav, onBuy }: { months: string[]; show
   const groups = [...new Set(rows.map((r) => r.group))];
   const [view, setView] = useState<"summary" | "months">("summary");
   const switcher = (
-    <div className="inline-flex border border-stone-300 text-[13px]">
-      {(
-        [
-          ["summary", "Summary"],
-          ["months", "Month by month"],
-        ] as const
-      ).map(([k, label]) => (
-        <button key={k} type="button" onClick={() => setView(k)} className={cx("border-r border-stone-300 px-3 py-1 font-semibold last:border-r-0", view === k ? "bg-stone-900 text-white" : "text-stone-600 hover:text-stone-900")}>
-          {label}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      active={view}
+      onChange={setView}
+      items={[
+        { key: "summary", label: "Summary" },
+        { key: "months", label: "Month by month" },
+      ]}
+    />
   );
   if (view === "summary")
     return (
