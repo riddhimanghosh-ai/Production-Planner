@@ -133,6 +133,15 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
                   )}
                 </td>
               </tr>
+              {feas.bean && (
+                <tr>
+                  <td className={cx(tbl.td, "bg-stone-50 text-stone-500")}>Green bean cost</td>
+                  <td className={cx(tbl.td, feas.bean.risk === "high" ? "text-red-700" : "text-stone-900")}>
+                    {feas.bean.fixed ? `Fixed at ₹${feas.bean.pricedAt}/kg` : `Not fixed, market ₹${feas.bean.marketNow}/kg`} · beans are {feas.bean.shareOfCost.toFixed(0)}% of cost · margin at today&apos;s bean price{" "}
+                    {feas.bean.marginToday.toFixed(1)}%
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -292,6 +301,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
   );
 }
 
+const ORIGINS_LABEL: Record<string, string> = ORIGINS;
 const link = "underline decoration-stone-300 underline-offset-2 hover:decoration-brand-600";
 const eyebrow = "mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-700";
 
@@ -391,8 +401,59 @@ function CooCheck({ feas }: { feas: Feasibility }) {
         </section>
       )}
 
+      {feas.bean && (
+        <section>
+          <div className={eyebrow}>{feas.line.ok ? "2" : "3"} · Green bean cost</div>
+          <div className="border border-stone-300 bg-white">
+            <table className="tabular w-full text-[13px]">
+              <tbody>
+                <tr>
+                  <td className={cx(tbl.td, "w-56 bg-stone-50 text-stone-500")}>Beans</td>
+                  <td className={tbl.td}>
+                    {ORIGINS_LABEL[feas.bean.origin] ?? feas.bean.origin} · {feas.bean.grade} · {feas.bean.beanTonnes} t needed
+                  </td>
+                </tr>
+                <tr>
+                  <td className={cx(tbl.td, "bg-stone-50 text-stone-500")}>Price the order was costed on</td>
+                  <td className={tbl.td}>
+                    ₹{feas.bean.pricedAt}/kg {feas.bean.fixed ? <b className="text-emerald-700">fixed with the supplier</b> : <b>market price, not fixed</b>}
+                  </td>
+                </tr>
+                <tr>
+                  <td className={cx(tbl.td, "bg-stone-50 text-stone-500")}>Market price today</td>
+                  <td className={tbl.td}>
+                    ₹{feas.bean.marketNow}/kg{" "}
+                    {Math.abs(feas.bean.changePct) >= 0.5 && (
+                      <span className={feas.bean.changePct > 0 ? "text-red-700" : "text-emerald-700"}>
+                        ({feas.bean.changePct > 0 ? "+" : ""}
+                        {feas.bean.changePct.toFixed(1)}% since costed)
+                      </span>
+                    )}
+                  </td>
+                </tr>
+                <tr>
+                  <td className={cx(tbl.td, "bg-stone-50 text-stone-500")}>Share of cost</td>
+                  <td className={tbl.td}>Green beans are {feas.bean.shareOfCost.toFixed(0)}% of this order&apos;s cost</td>
+                </tr>
+                <tr>
+                  <td className={cx(tbl.td, "bg-stone-50 text-stone-500")}>Margin</td>
+                  <td className={cx(tbl.td, "font-semibold", feas.bean.marginToday < feas.bean.minPct ? "text-red-700" : "text-emerald-700")}>
+                    {feas.bean.marginToday.toFixed(1)}% at today&apos;s bean price
+                    {feas.bean.marginThen != null && <span className="font-normal text-stone-500"> (was {feas.bean.marginThen.toFixed(1)}% when priced)</span>} · minimum {feas.bean.minPct}%
+                  </td>
+                </tr>
+                <tr>
+                  <td className={cx(tbl.td, "bg-stone-50 text-stone-500")}>Risk</td>
+                  <td className={cx(tbl.td, feas.bean.risk === "high" ? "text-red-700" : "text-stone-700")}>{feas.bean.note}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       <section>
-        <div className={eyebrow}>{feas.line.ok ? "2" : "3"} · Materials, stock and lead time</div>
+        <div className={eyebrow}>{(feas.line.ok ? 2 : 3) + (feas.bean ? 1 : 0)} · Materials, stock and lead time</div>
         <div className="overflow-x-auto border border-stone-300 bg-white">
           <table className="tabular w-full min-w-[720px] text-[13px]">
             <thead>

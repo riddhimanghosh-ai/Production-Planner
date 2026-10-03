@@ -227,7 +227,7 @@ function Approvals({ queue, mineCount, viewer }: { queue: ReturnType<typeof appr
               <th className={tbl.thR}>Tonnes</th>
               <th className={tbl.thR}>Value</th>
               <th className={tbl.thR}>Margin</th>
-              <th className={tbl.th}>Feasible? (COO check)</th>
+              <th className={tbl.th}>COO check: capacity and bean cost</th>
               <th className={tbl.th}>CFO</th>
               <th className={tbl.th}>COO</th>
               <th className={tbl.thR}>Waiting</th>
@@ -305,7 +305,15 @@ function FeasibilityCell({ f, beanFixed, orderId }: { f: Feasibility; beanFixed:
           </span>
         )}
       </div>
-      {!beanFixed && <div className="text-stone-500">Bean price not fixed yet</div>}
+      {f.bean && (
+        <div className="text-stone-600">
+          Beans:{" "}
+          <span className={f.bean.risk === "high" ? "text-red-700" : f.bean.risk === "watch" ? "text-stone-900" : "text-emerald-700"}>
+            {f.bean.fixed ? `fixed ₹${f.bean.pricedAt}/kg` : `market ₹${f.bean.marketNow}/kg, not fixed`} · margin {f.bean.marginToday.toFixed(1)}%
+          </span>
+        </div>
+      )}
+      {!beanFixed && !f.bean && <div className="text-stone-500">Bean price not fixed yet</div>}
       <Link href={`/orders/${orderId}?tab=coo`} className="text-[11px] text-stone-500 underline underline-offset-2 hover:text-stone-900">
         Full check
       </Link>
