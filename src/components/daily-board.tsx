@@ -7,7 +7,7 @@ import { addMonths, monthLabel } from "@/lib/domain";
 import { ProductChip } from "./plan-calendar";
 import { buttonClass, cx, tbl } from "./ui";
 
-export type DaySlot = { allocationId: number; customer: string; product: string; productType: string; planned: number; made: number };
+export type DaySlot = { allocationId: number; customer: string; product: string; productType: string; blend: string; planned: number; made: number };
 export type DailyLine = { id: number; code: string; dayCapacity: number; monthCapacity: number; runDays: number[]; slots: DaySlot[] };
 export type DayLogView = {
   id: number;
@@ -26,6 +26,12 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: 
 const STOP_REASONS = ["Planned shutdown", "Breakdown", "No power", "No material", "Holiday", "Cleaning / changeover", "Other"];
 const REASONS = ["Breakdown", "Maintenance", "Material shortage", "Power cut", "Quality hold", "Other"];
 
+const VARIANT_NAMES: Record<string, string> = { SD: "Spray-dried", AG: "Agglomerated", FDC: "Freeze-dried" };
+function labelOf(v: string) {
+  const [pt, blend] = v.split(":");
+  return `${VARIANT_NAMES[pt] ?? pt}${blend === "CHICORY" ? " + chicory" : ""}`;
+}
+
 function runsOn(l: DailyLine, date: string) {
   return l.runDays.includes(new Date(`${date}T00:00:00`).getDay());
 }
@@ -36,7 +42,23 @@ function dayInfo(date: string) {
 }
 
 // Daily calendar: one cell per line per day. Lock the day to start it, change capacity mid-day, close it with tonnes made.
-export function DailyBoard({ month, months, days, lines, logs, canEdit }: { month: string; months: string[]; days: string[]; lines: DailyLine[]; logs: Record<string, DayLogView>; canEdit: boolean }) {
+export function DailyBoard({
+  month,
+  months,
+  days,
+  lines,
+  logs,
+  canEdit,
+  changeoverHours,
+}: {
+  month: string;
+  months: string[];
+  days: string[];
+  lines: DailyLine[];
+  logs: Record<string, DayLogView>;
+  canEdit: boolean;
+  changeoverHours: Record<string, number>;
+}) {
   const [open, setOpen] = useState<{ lineId: number; date: string } | null>(null);
   // Open on the running day (or the next day still to make), just after the sticky line column.
   const scroller = useRef<HTMLDivElement>(null);
@@ -93,7 +115,7 @@ export function DailyBoard({ month, months, days, lines, logs, canEdit }: { mont
           </thead>
           <tbody>
             {lines.map((l) => (
-              <LineRow key={l.id} l={l} days={days} logs={logs} month={month} canEdit={canEdit} onOpen={(d) => setOpen({ lineId: l.id, date: d })} />
+              <LineRow key={l.id} l={l} days={days} logs={logs} month={month} canEdit={canEdit} changeoverHours={changeoverHours} onOpen={(d) => setOpen({ lineId: l.id, date: d })} />
             ))}
           </tbody>
         </table>
@@ -117,28 +139,53 @@ export function DailyBoard({ month, months, days, lines, logs, canEdit }: { mont
 // Plan every day of the month for one line: closed days keep what was made; the rest of the orders'
 // tonnes (including any short days) are spread over the open days at day capacity. Whatever does not
 // fit before month end is flagged with a button to move it to next month.
-function LineRow({ l, days, logs, month, canEdit, onOpen }: { l: DailyLine; days: string[]; logs: Record<string, DayLogView>; month: string; canEdit: boolean; onOpen: (d: string) => void }) {
+function LineRow({ l, days, logs, month, canEdit, changeoverHours, onOpen }: { l: DailyLine; days: string[]; logs: Record<string, DayLogView>; month: string; canEdit: boolean; changeoverHours: Record<string, number>; onOpen: (d: string) => void }) {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
   const made = days.reduce((a, d) => a + (logs[`${l.id}|${d}`]?.madeT ?? 0), 0);
   const planned = l.slots.reduce((a, s) => a + s.planned, 0);
 
   // Queue of tonnes still to make, order by order.
-  const queue = l.slots.map((s) => ({ slot: s, left: Math.max(0, s.planned - s.made) }));
-  const plan: Record<string, { tonnes: number; slot?: DaySlot }> = {};
+  // Run the same product and blend back to back (pure before chicory, spray-dried before agglomerated) to keep cleaning to a minimum.
+  const variant = (x: DaySlot) => `${x.productType}:${x.blend}`;
+  const rank = (x: DaySlot) => (x.blend === "CHICORY" ? 2 : 0) + (x.productType === "SD" ? 0 : 1);
+  const queue = [...l.slots].sort((a, b) => rank(a) - rank(b)).map((s) => ({ slot: s, left: Math.max(0, s.planned - s.made) }));
+  const plan: Record<string, { tonnes: number; slot?: DaySlot; changeover?: { label: string; hours: number; lostMt: number } }> = {};
+  let lastVariant: string | null = null;
+  const hoursFor = (from: string, to: string) => {
+    const [fp, fb] = from.split(":");
+    const [tp, tb] = to.split(":");
+    return (fp !== tp ? (changeoverHours[`${fp}_${tp}`] ?? 4) : 0) + (fb !== tb ? (changeoverHours[`${fb}_${tb}`] ?? 4) : 0);
+  };
   for (const d of days) {
     if (!runsOn(l, d)) continue;
     const log = logs[`${l.id}|${d}`];
     if (log?.stopped) continue;
     if (log?.closed) {
-      plan[d] = { tonnes: l.dayCapacity, slot: l.slots.find((s) => s.allocationId === log.allocationId) };
+      const done = l.slots.find((s) => s.allocationId === log.allocationId);
+      plan[d] = { tonnes: l.dayCapacity, slot: done };
+      if (done) lastVariant = variant(done);
       continue;
     }
     let room = log ? log.capacityT : l.dayCapacity;
     let first: DaySlot | undefined = log ? l.slots.find((s) => s.allocationId === log.allocationId) : undefined;
     let tonnes = 0;
+    let changeover: { label: string; hours: number; lostMt: number } | undefined;
     for (const q of queue) {
       if (room <= 0.05) break;
+      if (q.left <= 0.05) continue;
+      // Switching to another product or blend costs cleaning time out of today's capacity.
+      if (lastVariant && lastVariant !== variant(q.slot)) {
+        const hours = hoursFor(lastVariant, variant(q.slot));
+        const lostMt = Math.round((hours / 24) * l.dayCapacity * 10) / 10;
+        changeover = { label: `${labelOf(lastVariant)} → ${labelOf(variant(q.slot))}`, hours, lostMt };
+        room -= lostMt;
+        if (room <= 0.05) {
+          lastVariant = variant(q.slot);
+          break;
+        }
+      }
+      lastVariant = variant(q.slot);
       const take = Math.min(room, q.left);
       if (take <= 0.05) continue;
       q.left -= take;
@@ -146,7 +193,7 @@ function LineRow({ l, days, logs, month, canEdit, onOpen }: { l: DailyLine; days
       tonnes += take;
       first ??= q.slot;
     }
-    if (tonnes > 0.05 || log) plan[d] = { tonnes: Math.round(tonnes * 10) / 10, slot: first };
+    if (tonnes > 0.05 || log || changeover) plan[d] = { tonnes: Math.round(tonnes * 10) / 10, slot: first ?? queue.find((q) => q.left > 0.05)?.slot, changeover };
   }
   const overflow = Math.round(queue.reduce((a, q) => a + q.left, 0) * 10) / 10;
   const overflowSlot = [...queue].reverse().find((q) => q.left > 0.05)?.slot;
@@ -243,6 +290,11 @@ function LineRow({ l, days, logs, month, canEdit, onOpen }: { l: DailyLine; days
                     </tr>
                   </tbody>
                 </table>
+                {p.changeover && !log?.closed && (
+                  <div className="text-[10px] font-semibold text-stone-700" title="Cleaning time when the line switches product or blend">
+                    Changeover {p.changeover.label} · {p.changeover.hours} h · −{p.changeover.lostMt} t
+                  </div>
+                )}
                 {short > 0.05 && (
                   <div className="text-[10px] text-red-700">
                     {lastChange ? `${lastChange.reason.split(":")[0]}. ` : ""}

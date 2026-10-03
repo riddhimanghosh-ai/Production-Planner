@@ -291,10 +291,10 @@ export function OrderWizard({
   // Availability check as soon as product, tonnes and months are known.
   useEffect(() => {
     if (!v.productType || !(totalT > 0) || !orderMonths.length) return;
-    const t = setTimeout(() => startCheck(async () => setAvail(await availabilityAction(v.productType, orderMonths, needs, orderId))), 250);
+    const t = setTimeout(() => startCheck(async () => setAvail(await availabilityAction(v.productType, orderMonths, needs, orderId, v.blend))), 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [v.productType, needs, orderId]);
+  }, [v.productType, v.blend, needs, orderId]);
 
   // Order lines = each month split across lines (the planner's proposal, or the salesperson's own split).
   const orderLines = useMemo(() => {

@@ -37,6 +37,8 @@ export type CalendarCell = {
     need: number;
     monthShort: number;
   }[];
+  // Cleaning time when the line runs more than one product or blend this month.
+  changeover: { hours: number; lostMt: number; switches: { from: string; to: string; hours: number }[] } | null;
 };
 type LineView = {
   id: number;
@@ -181,7 +183,7 @@ export function PlanCalendar({ months, lines, cells, canEdit, canRequest }: { mo
                   const c = cell(l.id, m);
                   if (!c) return <td key={m} className="border-b border-r border-stone-300" />;
                   const tn = tone(c.used, c.capacity);
-                  const free = c.capacity - c.used;
+                  const free = c.capacity - c.used - (c.changeover?.lostMt ?? 0);
                   const matShort = c.materials.filter((x) => x.monthShort > 0.5);
                   const k = `${l.id}|${m}`;
                   return (
@@ -244,6 +246,11 @@ export function PlanCalendar({ months, lines, cells, canEdit, canRequest }: { mo
                               {PRODUCT_TYPES[x.p as ProductType]} {t(x.qty)}
                             </ProductChip>
                           ))}
+                        </div>
+                      )}
+                      {c.changeover && (
+                        <div className="mt-1 text-[10px] font-semibold text-stone-700" title={c.changeover.switches.map((x) => `${x.from} → ${x.to}: ${x.hours} h`).join("\n")}>
+                          {c.changeover.switches.length} changeover{c.changeover.switches.length > 1 ? "s" : ""} · {c.changeover.hours} h · −{c.changeover.lostMt} t
                         </div>
                       )}
                       {(c.note || c.materials.length > 0) && (
@@ -334,7 +341,7 @@ function CellDrawer({
   });
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const free = cell.capacity - cell.used;
+  const free = cell.capacity - cell.used - (cell.changeover?.lostMt ?? 0);
   const act = (fn: () => Promise<{ error: string | null }>, ok: string) =>
     start(async () => {
       const r = await fn();
@@ -376,6 +383,30 @@ function CellDrawer({
         </div>
 
         {msg && <p className="mt-4 rounded-sm bg-stone-100 px-3 py-2 text-sm text-stone-700">{msg}</p>}
+
+        {cell.changeover && (
+          <Section title="Changeovers this month">
+            <table className="w-full border border-stone-300 text-[13px]">
+              <tbody>
+                {cell.changeover.switches.map((x, i) => (
+                  <tr key={i} className="border-b border-stone-200 last:border-0">
+                    <td className="px-2 py-1">
+                      {x.from} → {x.to}
+                    </td>
+                    <td className="px-2 py-1 text-right">{x.hours} h</td>
+                  </tr>
+                ))}
+                <tr className="bg-stone-50 font-semibold">
+                  <td className="px-2 py-1">Lost to cleaning</td>
+                  <td className="px-2 py-1 text-right">
+                    {cell.changeover.hours} h · −{cell.changeover.lostMt} t
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="mt-1 text-xs text-stone-500">Assumes each product and blend runs as one block this month. Hours are set in Line setup.</p>
+          </Section>
+        )}
 
         <Section title="Orders in this box">
           {cell.orders.length === 0 && <p className="text-sm text-stone-500">No orders yet.</p>}

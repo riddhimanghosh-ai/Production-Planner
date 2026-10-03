@@ -243,10 +243,10 @@ async function run(fn: (viewer: Awaited<ReturnType<typeof getViewer>>) => unknow
   return { error: null };
 }
 
-export async function availabilityAction(productType: string, months: string[], need: number | Record<string, number>, orderId?: number) {
+export async function availabilityAction(productType: string, months: string[], need: number | Record<string, number>, orderId?: number, blend = "PURE") {
   const valid = months.filter((m) => month.safeParse(m).success).slice(0, 24);
   const clean = typeof need === "number" ? Math.max(0, Number(need) || 0) : Object.fromEntries(valid.map((m) => [m, Math.max(0, Number(need[m]) || 0)]));
-  return planAvailability(productType, valid, clean, orderId);
+  return planAvailability(productType, valid, clean, orderId, blend === "CHICORY" ? "CHICORY" : "PURE");
 }
 
 export async function monthCapacityAction(lineId: number, monthKey: string, capacityMt: number, note: string) {

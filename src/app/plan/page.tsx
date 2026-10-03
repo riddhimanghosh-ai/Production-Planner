@@ -5,7 +5,7 @@ import { ProductionLog, type MonthTally, type ProductionRow } from "@/components
 import { PlanSuggestions } from "@/components/plan-suggestions";
 import { PageHeader } from "@/components/ui";
 import { store } from "@/data/store";
-import { capacityAt, freeAt, loadAt, loadCapacityState, noteAt, planHorizon, reservedAt } from "@/lib/capacity";
+import { capacityAt, changeoverAt, freeAt, loadAt, loadCapacityState, noteAt, planHorizon, reservedAt } from "@/lib/capacity";
 import { can, productLabel } from "@/lib/domain";
 import { inventoryProjection } from "@/lib/inventory";
 import { requirementsFor } from "@/lib/procurement";
@@ -65,6 +65,7 @@ export default async function PlanPage({ searchParams }: PageProps<"/plan">) {
         capacity: capacityAt(state, line.id, m),
         used: loadAt(state, line.id, m),
         reserved: reservedAt(state, line.id, m),
+        changeover: changeoverAt(state, line.id, m),
         note: noteAt(state, line.id, m),
         orders: rows.map((r) => {
           const ol = st.orderLines.find((l) => l.id === r.orderLineId)!;
@@ -199,6 +200,7 @@ function Daily({ months, monthParam, canEdit }: { months: string[]; monthParam?:
             customer: st.customers.find((c) => c.id === st.orders.find((o) => o.id === a.orderId)?.customerId)?.name ?? "",
             product: productLabel(sku, ol.chicoryPct),
             productType: sku.productType,
+            blend: sku.blend,
             planned: a.quantityMt,
             made: a.producedMt ?? 0,
           };
@@ -219,5 +221,11 @@ function Daily({ months, monthParam, canEdit }: { months: string[]; monthParam?:
       stopped: !!d.stopped,
     };
   }
-  return <DailyBoard month={month} months={shown} days={days} lines={lines} logs={logs} canEdit={canEdit} />;
+  const set = loadSettings();
+  const changeoverHours = Object.fromEntries(
+    Object.keys(set)
+      .filter((k) => k.startsWith("changeover."))
+      .map((k) => [k.replace("changeover.", ""), set[k]]),
+  );
+  return <DailyBoard month={month} months={shown} days={days} lines={lines} logs={logs} canEdit={canEdit} changeoverHours={changeoverHours} />;
 }

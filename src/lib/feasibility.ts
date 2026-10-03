@@ -50,7 +50,7 @@ export function orderFeasibility(orderId: number, shorts: Shortage[] = shortages
 
   const needs = order.shipments?.length ? shipmentTonnes(order.shipments) : lines.reduce<Record<string, number>>((a, l) => ({ ...a, [l.month]: (a[l.month] ?? 0) + l.quantityMt }), {});
   const months = Object.keys(needs).sort();
-  const avail = planAvailability(sku.productType, months, needs, orderId);
+  const avail = planAvailability(sku.productType, months, needs, orderId, sku.blend);
   const lineShort = avail.perMonth.filter((m) => m.short > 0.05).map((m) => ({ month: m.month, short: m.short }));
   // Would it fit if the line's product split were changed (whole line free, not just this product's share)?
   const state = loadCapacityState({ excludeOrderId: orderId });

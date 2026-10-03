@@ -1,6 +1,6 @@
 import { nextId, store, transaction } from "@/data/store";
 import type { Order, OrderLine, Shipment, Sku } from "@/data/types";
-import { capacityAt, freeAt, linesFor, loadAt, loadCapacityState, packLoadAt, productFreeAt, type CapacityState, type Issue } from "./capacity";
+import { capacityAt, extraChangeoverMt, freeAt, linesFor, loadAt, loadCapacityState, packLoadAt, productFreeAt, type CapacityState, type Issue } from "./capacity";
 import {
   APPROVER_FOCUS,
   can,
@@ -149,12 +149,13 @@ export type MonthAvailability = {
 
 // For each requested month, how much space the capable lines have and how the tonnes would split across them.
 // `need` is either the same tonnes every month or a per-month map (container shipments differ month to month).
-export function planAvailability(productType: string, months: string[], need: number | Record<string, number>, excludeOrderId?: number) {
+export function planAvailability(productType: string, months: string[], need: number | Record<string, number>, excludeOrderId?: number, blend = "PURE") {
   const state = loadCapacityState({ excludeOrderId });
   const capable = linesFor(state, productType);
   const needFor = (month: string) => (typeof need === "number" ? need : (need[month] ?? 0));
   const perMonth: MonthAvailability[] = months.map((month) => {
-    const lines = capable.map((l) => ({ lineId: l.id, code: l.code, name: l.name, capacity: capacityAt(state, l.id, month), free: Math.max(0, productFreeAt(state, l.id, productType, month)) }));
+    // Free space, less any extra cleaning this order would add by bringing a new product or blend onto the line.
+    const lines = capable.map((l) => ({ lineId: l.id, code: l.code, name: l.name, capacity: capacityAt(state, l.id, month), free: Math.max(0, productFreeAt(state, l.id, productType, month) - extraChangeoverMt(state, l.id, month, productType, blend)) }));
     let left = needFor(month);
     const proposal: { lineId: number; quantityMt: number }[] = [];
     for (const l of [...lines].sort((a, b) => b.free - a.free)) {

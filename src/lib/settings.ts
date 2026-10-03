@@ -2,7 +2,7 @@ import { store } from "@/data/store";
 
 export type SettingDef = { key: string; value: number; label: string; unit: string; grp: string };
 
-export const SETTING_GROUPS = ["Raw coffee & chicory", "Making & packing", "Freight, currency & credit", "Approval rules", "Planning", "Lead times"] as const;
+export const SETTING_GROUPS = ["Raw coffee & chicory", "Making & packing", "Freight, currency & credit", "Approval rules", "Planning", "Lead times", "Changeovers"] as const;
 // Cost rates live on the Profit & costs screen; planning rules live in Settings.
 export const COST_GROUPS = ["Raw coffee & chicory", "Making & packing", "Freight, currency & credit", "Approval rules"];
 export const PLANNING_GROUPS = ["Planning", "Lead times"];
@@ -45,6 +45,15 @@ export const DEFAULT_SETTINGS: SettingDef[] = [
   { key: "lead.cans", value: 45, label: "Printed cans lead", unit: "days", grp: "Lead times" },
   { key: "lead.material_before_production", value: 7, label: "Materials needed on site before production", unit: "days", grp: "Lead times" },
 ];
+
+// Hours a line loses when it switches what it makes (stop, clean, restart). Placeholders until SLN confirms.
+export const CHANGEOVER_DEFAULTS: SettingDef[] = [
+  { key: "changeover.SD_AG", value: 4, label: "Spray-dried → Agglomerated", unit: "hours", grp: "Changeovers" },
+  { key: "changeover.AG_SD", value: 6, label: "Agglomerated → Spray-dried", unit: "hours", grp: "Changeovers" },
+  { key: "changeover.PURE_CHICORY", value: 2, label: "Pure coffee → Coffee + chicory", unit: "hours", grp: "Changeovers" },
+  { key: "changeover.CHICORY_PURE", value: 8, label: "Coffee + chicory → Pure coffee (full clean)", unit: "hours", grp: "Changeovers" },
+];
+DEFAULT_SETTINGS.push(...CHANGEOVER_DEFAULTS);
 
 export type Settings = Record<string, number>;
 

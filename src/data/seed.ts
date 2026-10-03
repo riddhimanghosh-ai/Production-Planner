@@ -381,7 +381,7 @@ export function seedStore() {
         spillOverride: "",
         shipments,
         // Split each month across the lines that have room, the same way the order guide does.
-        lines: planAvailability(sku.productType, [shipMonth], needs).perMonth.flatMap((m) => {
+        lines: planAvailability(sku.productType, [shipMonth], needs, undefined, sku.blend).perMonth.flatMap((m) => {
           const split = m.proposal.length ? m.proposal.map((p) => ({ ...p })) : [{ lineId: suggestLine(state, sku.productType, m.month)!, quantityMt: 0 }];
           split[0].quantityMt = Math.round((split[0].quantityMt + m.short) * 10) / 10;
           return split.map((p) => ({ skuId: sku.id, chicoryPct: o.chicoryPct ?? 0, month: m.month, quantityMt: p.quantityMt, pricePerKg: o.price, lineId: p.lineId }));
