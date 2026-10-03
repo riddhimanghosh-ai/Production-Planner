@@ -35,7 +35,7 @@ Salespeople (Rohan Mehta, Priya Nair, Karan Shah) · Sales head · CFO · COO ·
 
 ## Assumptions to confirm with SLN
 
-- Three lines: Lines 1–2 make spray-dried or agglomerated, Line 3 spray-dried only; capacities (45 / 45 / 35 t a month) are placeholders. Each line has one monthly capacity shared by everything it makes.
+- Four lines: SD01 and SD02 make spray-dried with agglomeration, SD03 spray-dried only, FDC freeze-dried; capacities (45 / 45 / 35 / 15 t a month) are placeholders. Each line has one monthly capacity shared by everything it makes.
 - CFO and COO approve in parallel; a full line needs a reason for the COO before sending.
 - Stock, purchase orders, lead times, costs and the 18% minimum profit are sample figures.
 - Real logins, email alerts, Excel upload and a database come in the working prototype.

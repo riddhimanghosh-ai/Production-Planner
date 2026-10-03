@@ -59,7 +59,7 @@ export default function DemoPage() {
       viewer: id("", "PLANNER"),
       where: "Production calendar · Daily",
       href: "/plan?tab=daily",
-      show: "Line 1 is running today. Close the day with 1.4 t and a reason.",
+      show: "SD01 is running today. Close the day with 1.4 t and a reason.",
       point: "The shop floor logs output daily; it rolls into the month.",
     },
     {

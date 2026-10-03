@@ -176,7 +176,7 @@ export function Sellable({ view, months, room, packs, skus, canCreate }: { view:
         </section>
       )}
       <p className="max-w-3xl text-[13px] text-stone-500">
-        Tonnes are what is still free after approved orders and orders waiting for approval. Spray-dried and Agglomerated share Lines 1 and 2, so selling one uses up space for the other. Jars and cans must also fit the filling limit, so a product
+        Tonnes are what is still free after approved orders and orders waiting for approval. Spray-dried and Agglomerated share SD01 and SD02, so selling one uses up space for the other. Jars and cans must also fit the filling limit, so a product
         code shows the smaller of the two. Codes share the same space: selling one reduces the others. Click a figure to start an order for that product and month.
       </p>
     </div>

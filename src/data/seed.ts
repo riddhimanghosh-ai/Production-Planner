@@ -31,6 +31,8 @@ const SKUS = [
   { code: "Agglomerated · Pure · Glass jars", name: "Agglomerated, pure coffee, 100 g glass jars", productType: "AG", blend: "PURE", packFormat: "GLASS", packSizeKg: 0.1 },
   { code: "Agglomerated · Chicory · Glass jars", name: "Agglomerated, coffee + chicory, 100 g glass jars", productType: "AG", blend: "CHICORY", packFormat: "GLASS", packSizeKg: 0.1 },
   { code: "Agglomerated · Pure · Cans", name: "Agglomerated, pure coffee, 200 g cans", productType: "AG", blend: "PURE", packFormat: "CAN", packSizeKg: 0.2 },
+  { code: "Freeze-dried · Pure · Bulk bags", name: "Freeze-dried, pure coffee, 25 kg bulk bags", productType: "FDC", blend: "PURE", packFormat: "BULK", packSizeKg: 25 },
+  { code: "Freeze-dried · Pure · Glass jars", name: "Freeze-dried, pure coffee, 100 g glass jars", productType: "FDC", blend: "PURE", packFormat: "GLASS", packSizeKg: 0.1 },
 ];
 
 const TERMS = {
@@ -157,6 +159,23 @@ const ORDERS: SeedOrder[] = [
     flow: "committed",
   },
   {
+    customer: "Tokyo Fine Foods KK",
+    city: "Tokyo",
+    country: "Japan",
+    contact: "Yuki Sato",
+    owner: "Priya Nair",
+    sku: "Freeze-dried · Pure · Bulk bags",
+    months: [2, 10],
+    totalMt: 90,
+    price: 2460,
+    origin: "BRAZIL",
+    grade: "Arabica Plantation A",
+    terms: "OA30",
+    incoterm: "CIF",
+    freight: "SELLER",
+    flow: "committed",
+  },
+  {
     customer: "Mitsui Foods KK",
     city: "Yokohama",
     country: "Japan",
@@ -241,7 +260,7 @@ const ORDERS: SeedOrder[] = [
     terms: "OA30",
     incoterm: "CIF",
     freight: "SELLER",
-    flow: { sendBack: "COO", comment: "Can filling is tight in the first two months, shift those lines to later months or split across Line 2." },
+    flow: { sendBack: "COO", comment: "Can filling is tight in the first two months, shift those lines to later months or split across SD02." },
   },
   {
     customer: "Caspian Trade House",
@@ -292,19 +311,21 @@ export function seedStore() {
 
   // Three lines; monthly maxima are placeholders until SLN confirms them.
   st.lines = [
-    { code: "Line 1", name: "Makes powder or granules", capacityMt: 45 },
-    { code: "Line 2", name: "Makes powder or granules", capacityMt: 45 },
-    { code: "Line 3", name: "Makes powder only", capacityMt: 35 },
+    { code: "SD01", name: "Spray-dried, with agglomeration", capacityMt: 45 },
+    { code: "SD02", name: "Spray-dried, with agglomeration", capacityMt: 45 },
+    { code: "SD03", name: "Spray-dried only, no agglomeration", capacityMt: 35 },
+    { code: "FDC", name: "Freeze-dried", capacityMt: 15 },
   ].map((l) => ({ ...l, id: nextId("lines"), active: true, capacityConfirmed: false }));
   const lineId = (code: string) => st.lines.find((l) => l.code === code)!.id;
   st.lineProducts = [
-    { lineId: lineId("Line 1"), productType: "SD", capacityMt: 30 },
-    { lineId: lineId("Line 1"), productType: "AG", capacityMt: 15 },
-    { lineId: lineId("Line 2"), productType: "SD", capacityMt: 15 },
-    { lineId: lineId("Line 2"), productType: "AG", capacityMt: 30 },
-    { lineId: lineId("Line 3"), productType: "SD", capacityMt: 35 },
+    { lineId: lineId("SD01"), productType: "SD", capacityMt: 30 },
+    { lineId: lineId("SD01"), productType: "AG", capacityMt: 15 },
+    { lineId: lineId("SD02"), productType: "SD", capacityMt: 15 },
+    { lineId: lineId("SD02"), productType: "AG", capacityMt: 30 },
+    { lineId: lineId("SD03"), productType: "SD", capacityMt: 35 },
+    { lineId: lineId("FDC"), productType: "FDC", capacityMt: 15 },
   ];
-  st.capacityOverrides = [{ lineId: lineId("Line 3"), month: M(8), capacityMt: 25, note: "Planned maintenance" }];
+  st.capacityOverrides = [{ lineId: lineId("SD03"), month: M(8), capacityMt: 25, note: "Planned maintenance" }];
   st.skus = SKUS.map((s) => ({ ...s, id: nextId("skus"), active: true }));
 
   for (const o of ORDERS) {
@@ -433,7 +454,7 @@ export function seedStore() {
     createdAt: new Date(),
     poId: null,
   });
-  st.reservations.push({ id: nextId("reservations"), lineId: lineId("Line 2"), month: M(10), quantityMt: 20, label: "Expected repeat order, Nordic Roast", productType: "SD", createdBy: "Production planner" });
+  st.reservations.push({ id: nextId("reservations"), lineId: lineId("SD02"), month: M(10), quantityMt: 20, label: "Expected repeat order, Nordic Roast", productType: "SD", createdBy: "Production planner" });
   seedDailyLogs(st);
 }
 
@@ -461,17 +482,17 @@ function seedDailyLogs(st: Store) {
       const events = [{ at: at(date, "07:00"), by: planner, capacityT: dayCap, reason: "Day started" }];
       let capacityT = dayCap;
       let madeT: number | null = dayCap;
-      if (line.code === "Line 2" && i === 4) {
+      if (line.code === "SD02" && i === 4) {
         capacityT = Math.round(dayCap * 0.5 * 10) / 10;
         events.push({ at: at(date, "11:40"), by: planner, capacityT, reason: "Breakdown: spray nozzle blocked, cleaning" });
         madeT = Math.round(dayCap * 0.6 * 10) / 10;
       }
-      if (line.code === "Line 1" && i === 3) {
+      if (line.code === "SD01" && i === 3) {
         capacityT = Math.round(dayCap * 0.7 * 10) / 10;
         events.push({ at: at(date, "14:15"), by: planner, capacityT, reason: "Material shortage: bulk bags arrived late" });
         madeT = Math.round(dayCap * 0.75 * 10) / 10;
       }
-      if (last && line.code === "Line 1") madeT = null; // today's shift, still running
+      if (last && line.code === "SD01") madeT = null; // today's shift, still running
       st.dayLogs.push({ id: nextId("dayLogs"), lineId: line.id, date, allocationId: slot.id, capacityT, lockedAt: at(date, "07:00"), lockedBy: planner, events, madeT, closedAt: madeT == null ? null : at(date, "19:00") });
       if (madeT != null) slot.producedMt = Math.round(((slot.producedMt ?? 0) + madeT) * 10) / 10;
     });
