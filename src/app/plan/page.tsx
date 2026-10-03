@@ -3,13 +3,15 @@ import { CalendarViewSwitch, PlanningTabs, type PlanningTab } from "@/components
 import { DailyBoard, NowRunning, type DailyLine, type DayLogView } from "@/components/daily-board";
 import { LineQualityBoard, type LineQuality } from "@/components/line-quality";
 import { TodayTasks, type Task } from "@/components/today-tasks";
+import { WhatIf, type Sim, type WhatIfParams } from "@/components/what-if";
+import { simulateBeanPrice, simulateCapacity, simulateLineStop } from "@/lib/simulate";
 import { defaultAlerts, lineReadings } from "@/lib/quality";
 import { ProductionLog, type MonthTally, type ProductionRow } from "@/components/production-log";
 import { PlanSuggestions } from "@/components/plan-suggestions";
 import { PageHeader, type StatItem } from "@/components/ui";
 import { store } from "@/data/store";
 import { capacityAt, changeoverAt, freeAt, loadAt, loadCapacityState, noteAt, planHorizon, reservedAt } from "@/lib/capacity";
-import { can, productLabel, todayIso, addMonths, monthLabel } from "@/lib/domain";
+import { can, productLabel, todayIso, addMonths, monthLabel, PRODUCT_TYPES } from "@/lib/domain";
 import { inventoryProjection, shortages } from "@/lib/inventory";
 import { requirementsFor } from "@/lib/procurement";
 import { getViewer } from "@/lib/role";
@@ -19,8 +21,8 @@ import { loadSettings } from "@/lib/settings";
 import { withShare } from "@/lib/workflow";
 
 export default async function PlanPage({ searchParams }: PageProps<"/plan">) {
-  const { tab, month: monthParam } = await searchParams;
-  const active: PlanningTab = tab === "new" || tab === "done" || tab === "daily" || tab === "today" || tab === "quality" ? tab : "calendar";
+  const { tab, month: monthParam, ...simParams } = await searchParams;
+  const active: PlanningTab = tab === "new" || tab === "done" || tab === "daily" || tab === "today" || tab === "quality" || tab === "whatif" ? tab : "calendar";
   const viewer = await getViewer();
   const suggestions = planSuggestions();
   const toPlace = suggestions.filter((x) => !x.keep).length;
@@ -135,6 +137,7 @@ export default async function PlanPage({ searchParams }: PageProps<"/plan">) {
       {(active === "calendar" || active === "daily") && <CalendarViewSwitch view={active === "daily" ? "daily" : "monthly"} />}
       {active === "today" && <Today months={months} canEdit={can(viewer.role, ["COO", "PLANNER"])} />}
       {active === "quality" && <Quality months={months} />}
+      {active === "whatif" && <WhatIfTab months={months} sp={simParams} />}
       {active === "daily" && <Daily months={months} monthParam={typeof monthParam === "string" ? monthParam : undefined} canEdit={can(viewer.role, ["COO", "PLANNER"])} />}
       {active === "done" && <ProductionDone months={months} monthParam={typeof monthParam === "string" ? monthParam : undefined} canEdit={can(viewer.role, ["COO", "PLANNER"])} />}
       {active === "calendar" && (
@@ -422,4 +425,26 @@ function Quality({ months }: { months: string[] }) {
       {months.length === 0 && null}
     </>
   );
+}
+
+// What-if scenarios: inputs come from the query string so the page stays a plain server render.
+function WhatIfTab({ months, sp }: { months: string[]; sp: Record<string, string | string[] | undefined> }) {
+  const state = loadCapacityState();
+  const str = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : "");
+  const sim: Sim = str("sim") === "bean" || str("sim") === "capacity" ? (str("sim") as Sim) : "line";
+  const lines = state.lines.map((l) => ({ id: l.id, code: l.code, productTypes: l.productTypes }));
+  // Defaults that show something on first open: the busiest line and month, a 15% bean rise, 10 t more on the fullest line.
+  const busiest = state.rows.reduce<Record<string, number>>((acc, r) => ({ ...acc, [`${r.lineId}|${r.month}`]: (acc[`${r.lineId}|${r.month}`] ?? 0) + r.quantityMt }), {});
+  const top = Object.entries(busiest)
+    .sort((a, b) => b[1] - a[1])[0]?.[0]
+    ?.split("|");
+  const lineId = Number(str("line")) || (top ? Number(top[0]) : lines[0]?.id);
+  const month = months.includes(str("month")) ? str("month") : (top?.[1] ?? months[0]);
+  const pct = str("pct") === "" ? 15 : Number(str("pct")) || 0;
+  const line = lines.find((l) => l.id === lineId) ?? lines[0];
+  const productType = str("product") in PRODUCT_TYPES ? str("product") : (line?.productTypes[0] ?? "SD");
+  const extraMt = Math.max(1, Number(str("extra")) || 10);
+  const params: WhatIfParams = { sim, lineId: line?.id ?? 0, month, pct, productType, extraMt };
+  const result = sim === "line" ? simulateLineStop(params.lineId, month) : sim === "bean" ? simulateBeanPrice(pct) : simulateCapacity(params.lineId, productType, extraMt);
+  return <WhatIf params={params} months={months} lines={lines} result={result} />;
 }

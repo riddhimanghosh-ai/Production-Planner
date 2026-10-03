@@ -1,6 +1,6 @@
 import { Segmented, Tabs } from "./ui";
 
-export type PlanningTab = "today" | "calendar" | "daily" | "new" | "done" | "quality" | "setup";
+export type PlanningTab = "today" | "calendar" | "daily" | "new" | "done" | "quality" | "whatif" | "setup";
 
 export function PlanningTabs({ active, toPlace }: { active: PlanningTab; toPlace?: number }) {
   return (
@@ -12,6 +12,7 @@ export function PlanningTabs({ active, toPlace }: { active: PlanningTab; toPlace
         { key: "new", href: "/plan?tab=new", label: "New orders", count: toPlace },
         { key: "done", href: "/plan?tab=done", label: "Production done" },
         { key: "quality", href: "/plan?tab=quality", label: "Line quality" },
+        { key: "whatif", href: "/plan?tab=whatif", label: "What if" },
         { key: "setup", href: "/capacity", label: "Line setup" },
       ]}
     />
