@@ -1,16 +1,18 @@
 import Link from "next/link";
 import { cx, Tabs } from "./ui";
 
-export type PlanningTab = "calendar" | "daily" | "new" | "done" | "setup";
+export type PlanningTab = "today" | "calendar" | "daily" | "new" | "done" | "quality" | "setup";
 
 export function PlanningTabs({ active, toPlace }: { active: PlanningTab; toPlace?: number }) {
   return (
     <Tabs
       active={active === "daily" ? "calendar" : active}
       tabs={[
+        { key: "today", href: "/plan?tab=today", label: "Today" },
         { key: "calendar", href: "/plan", label: "Calendar" },
         { key: "new", href: "/plan?tab=new", label: "New orders", count: toPlace },
         { key: "done", href: "/plan?tab=done", label: "Production done" },
+        { key: "quality", href: "/plan?tab=quality", label: "Line quality" },
         { key: "setup", href: "/capacity", label: "Line setup" },
       ]}
     />

@@ -504,9 +504,9 @@ function seedDailyLogs(st: Store) {
           start: "12:45",
           end: "18:40",
           outputKg: kg - Math.round(kg * 0.52),
-          qc: (madeT != null && madeT < capacityT - 0.05 ? "HOLD" : "RELEASED") as "HOLD" | "RELEASED",
-          moisturePct: madeT != null && madeT < capacityT - 0.05 ? 4.6 : 3.6,
-          note: madeT != null && madeT < capacityT - 0.05 ? "Moisture above 4.5%, retest" : "",
+          qc: (madeT != null && madeT < dayCap - 0.05 ? "HOLD" : "RELEASED") as "HOLD" | "RELEASED",
+          moisturePct: madeT != null && madeT < dayCap - 0.05 ? 4.6 : 3.6,
+          note: madeT != null && madeT < dayCap - 0.05 ? "Moisture above 4.5%, retest" : "",
         },
       ];
       st.dayLogs.push({

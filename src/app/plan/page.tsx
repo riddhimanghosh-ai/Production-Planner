@@ -1,13 +1,16 @@
 import { PlanCalendar, type CalendarCell } from "@/components/plan-calendar";
 import { CalendarViewSwitch, PlanningTabs, type PlanningTab } from "@/components/planning-tabs";
-import { DailyBoard, type DailyLine, type DayLogView } from "@/components/daily-board";
+import { DailyBoard, NowRunning, type DailyLine, type DayLogView } from "@/components/daily-board";
+import { LineQualityBoard, type LineQuality } from "@/components/line-quality";
+import { TodayTasks, type Task } from "@/components/today-tasks";
+import { defaultAlerts, lineReadings } from "@/lib/quality";
 import { ProductionLog, type MonthTally, type ProductionRow } from "@/components/production-log";
 import { PlanSuggestions } from "@/components/plan-suggestions";
 import { PageHeader } from "@/components/ui";
 import { store } from "@/data/store";
 import { capacityAt, changeoverAt, freeAt, loadAt, loadCapacityState, noteAt, planHorizon, reservedAt } from "@/lib/capacity";
-import { can, productLabel, todayIso } from "@/lib/domain";
-import { inventoryProjection } from "@/lib/inventory";
+import { can, productLabel, todayIso, addMonths } from "@/lib/domain";
+import { inventoryProjection, shortages } from "@/lib/inventory";
 import { requirementsFor } from "@/lib/procurement";
 import { getViewer } from "@/lib/role";
 import { lineMarginFor } from "@/lib/order-margin";
@@ -17,7 +20,7 @@ import { withShare } from "@/lib/workflow";
 
 export default async function PlanPage({ searchParams }: PageProps<"/plan">) {
   const { tab, month: monthParam } = await searchParams;
-  const active: PlanningTab = tab === "new" || tab === "done" || tab === "daily" ? tab : "calendar";
+  const active: PlanningTab = tab === "new" || tab === "done" || tab === "daily" || tab === "today" || tab === "quality" ? tab : "calendar";
   const viewer = await getViewer();
   const suggestions = planSuggestions();
   const toPlace = suggestions.filter((x) => !x.keep).length;
@@ -115,6 +118,8 @@ export default async function PlanPage({ searchParams }: PageProps<"/plan">) {
         />
       )}
       {(active === "calendar" || active === "daily") && <CalendarViewSwitch view={active === "daily" ? "daily" : "monthly"} />}
+      {active === "today" && <Today months={months} canEdit={can(viewer.role, ["COO", "PLANNER"])} />}
+      {active === "quality" && <Quality months={months} />}
       {active === "daily" && <Daily months={months} monthParam={typeof monthParam === "string" ? monthParam : undefined} canEdit={can(viewer.role, ["COO", "PLANNER"])} />}
       {active === "done" && <ProductionDone months={months} monthParam={typeof monthParam === "string" ? monthParam : undefined} canEdit={can(viewer.role, ["COO", "PLANNER"])} />}
       {active === "calendar" && (
@@ -231,4 +236,175 @@ function Daily({ months, monthParam, canEdit }: { months: string[]; monthParam?:
       .map((k) => [k.replace("changeover.", ""), set[k]]),
   );
   return <DailyBoard month={month} months={shown} days={days} lines={lines} logs={logs} canEdit={canEdit} changeoverHours={changeoverHours} todayIso={todayIso()} />;
+}
+
+// Shared: the daily lines + logs for one month, used by Today and Line quality.
+function dailyData(month: string) {
+  const st = store();
+  const state = loadCapacityState();
+  const approved = new Set(st.orders.filter((o) => o.status === "COMMITTED").map((o) => o.id));
+  const [y, mo] = month.split("-").map(Number);
+  const days = Array.from({ length: new Date(y, mo, 0).getDate() }, (_, i) => `${month}-${String(i + 1).padStart(2, "0")}`);
+  const lines: DailyLine[] = state.lines.map((l) => {
+    const cap = capacityAt(state, l.id, month);
+    const runDays = l.runDays ?? [1, 2, 3, 4, 5, 6];
+    return {
+      id: l.id,
+      code: l.code,
+      monthCapacity: cap,
+      runDays,
+      dayCapacity: Math.round((cap / Math.max(1, days.filter((d) => runDays.includes(new Date(`${d}T00:00:00`).getDay())).length)) * 10) / 10,
+      slots: st.allocations
+        .filter((a) => approved.has(a.orderId) && a.lineId === l.id && a.month === month)
+        .map((a) => {
+          const ol = st.orderLines.find((x) => x.id === a.orderLineId)!;
+          const sku = st.skus.find((x) => x.id === ol.skuId)!;
+          const order = st.orders.find((o) => o.id === a.orderId)!;
+          return {
+            allocationId: a.id,
+            orderId: a.orderId,
+            ref: order.ref,
+            customer: st.customers.find((c) => c.id === order.customerId)?.name ?? "",
+            product: productLabel(sku, ol.chicoryPct),
+            productType: sku.productType,
+            blend: sku.blend,
+            planned: a.quantityMt,
+            made: a.producedMt ?? 0,
+          };
+        }),
+    };
+  });
+  const logs: Record<string, DayLogView> = {};
+  for (const d of st.dayLogs.filter((x) => x.date.startsWith(month))) {
+    logs[`${d.lineId}|${d.date}`] = {
+      id: d.id,
+      allocationId: d.allocationId,
+      capacityT: d.capacityT,
+      lockedAt: d.lockedAt.toISOString(),
+      lockedBy: d.lockedBy,
+      events: d.events.map((e) => ({ ...e, at: e.at.toISOString() })),
+      madeT: d.madeT,
+      closed: !!d.closedAt,
+      stopped: !!d.stopped,
+      batches: (d.batches ?? []).map((b) => ({ ...b })),
+    };
+  }
+  return { st, days, lines, logs };
+}
+
+// The planner's day: what is running now and what needs doing, built from the live data.
+function Today({ months, canEdit }: { months: string[]; canEdit: boolean }) {
+  const today = todayIso();
+  // The sample data's running day stands in for "today" so the demo always has something live.
+  const st = store();
+  const openLog = st.dayLogs.find((d) => !d.closedAt && !d.stopped);
+  const focus = openLog?.date ?? today;
+  const month = focus.slice(0, 7);
+  const { days, lines, logs } = dailyData(month);
+  const tasks: Task[] = [];
+
+  for (const l of lines) {
+    const log = logs[`${l.id}|${focus}`];
+    const runsToday = l.runDays.includes(new Date(`${focus}T00:00:00`).getDay());
+    const hasWork = l.slots.some((s) => s.made < s.planned - 0.05);
+    if (!log && runsToday && hasWork)
+      tasks.push({ kind: "start", title: `Start ${l.code}`, detail: `${l.slots.find((s) => s.made < s.planned - 0.05)?.customer}, ${l.dayCapacity} t planned today`, href: `/plan?tab=daily&month=${month}`, action: "Lock and start", urgent: true });
+  }
+  for (const d of st.dayLogs.filter((d) => !d.closedAt && !d.stopped && d.date < focus)) {
+    const line = st.lines.find((l) => l.id === d.lineId)?.code ?? "";
+    tasks.push({
+      kind: "close",
+      title: `Close ${line} for ${new Date(`${d.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`,
+      detail: "Locked but never closed. Enter the tonnes made.",
+      href: `/plan?tab=daily&month=${d.date.slice(0, 7)}`,
+      action: "Close the day",
+      urgent: true,
+    });
+  }
+  const pendingQc = st.dayLogs.flatMap((d) => (d.batches ?? []).filter((b) => b.qc !== "RELEASED").map((b) => ({ ...b, line: st.lines.find((l) => l.id === d.lineId)?.code ?? "", month: d.date.slice(0, 7) })));
+  const held = pendingQc.filter((b) => b.qc === "HOLD");
+  const pend = pendingQc.filter((b) => b.qc === "PENDING");
+  if (held.length)
+    tasks.push({
+      kind: "qc",
+      title: `${held.length} lot${held.length > 1 ? "s" : ""} on QC hold`,
+      detail: held.map((b) => `${b.lotNo}${b.note ? ` (${b.note})` : ""}`).join(", "),
+      href: `/plan?tab=daily&month=${held[0].month}`,
+      action: "Decide",
+      urgent: true,
+    });
+  if (pend.length) tasks.push({ kind: "qc", title: `${pend.length} lot${pend.length > 1 ? "s" : ""} waiting for QC release`, detail: pend.map((b) => b.lotNo).join(", "), href: `/plan?tab=daily&month=${pend[0].month}`, action: "Release" });
+
+  const toPlace = planSuggestions().filter((x) => !x.keep);
+  if (toPlace.length)
+    tasks.push({
+      kind: "place",
+      title: `Place ${toPlace.length} new order slot${toPlace.length > 1 ? "s" : ""}`,
+      detail:
+        toPlace
+          .slice(0, 3)
+          .map((x) => x.customer)
+          .join(", ") + (toPlace.length > 3 ? "…" : ""),
+      href: "/plan?tab=new",
+      action: "Allocate",
+    });
+
+  const carry = st.allocations.filter((a) => a.month < month && a.producedMt != null && a.producedMt < a.quantityMt - 0.05 && st.orders.find((o) => o.id === a.orderId)?.status === "COMMITTED");
+  if (carry.length)
+    tasks.push({
+      kind: "carry",
+      title: `${carry.length} short slot${carry.length > 1 ? "s" : ""} from earlier months`,
+      detail: `${carry.reduce((a, x) => a + (x.quantityMt - (x.producedMt ?? 0)), 0).toFixed(1)} t not made yet, move it to a later month`,
+      href: "/plan?tab=done",
+      action: "Move",
+    });
+
+  const limit = addMonths(month, 2);
+  const shorts = shortages().filter((x) => x.month <= limit && !st.purchaseRequests.some((r) => r.status === "OPEN" && r.materialKey === x.key));
+  if (shorts.length)
+    tasks.push({
+      kind: "buy",
+      title: `${shorts.length} material${shorts.length > 1 ? "s" : ""} short in the next 3 months`,
+      detail: [...new Set(shorts.map((x) => x.name.replace("Green beans · ", "Beans · ")))].slice(0, 3).join(", "),
+      href: "/procurement",
+      action: "Ask procurement",
+    });
+
+  const q = lines.map((l) => ({ code: l.code, out: lineReadings(l.code, focus, undefined, l.code === "SD01").filter((s) => s.status === "out").length })).filter((x) => x.out > 0);
+  if (q.length) tasks.push({ kind: "quality", title: `Readings out of range on ${q.map((x) => x.code).join(", ")}`, detail: "Check the line before the lot is affected", href: "/plan?tab=quality", action: "See readings", urgent: true });
+
+  const order = { start: 0, close: 1, qc: 2, quality: 3, place: 4, carry: 5, buy: 6 };
+  tasks.sort((a, b) => Number(!!b.urgent) - Number(!!a.urgent) || order[a.kind] - order[b.kind]);
+
+  return (
+    <div className="space-y-6">
+      <TodayTasks tasks={canEdit ? tasks : tasks.filter((t) => t.kind !== "start" && t.kind !== "close")} />
+      <NowRunning lines={lines} logs={logs} days={days} todayIso={focus} month={month} />
+      {months.length === 0 && null}
+    </div>
+  );
+}
+
+// Live readings per line against target bands, with alerts and recent lot results.
+function Quality({ months }: { months: string[] }) {
+  const st = store();
+  const openLog = st.dayLogs.find((d) => !d.closedAt && !d.stopped);
+  const focus = openLog?.date ?? todayIso();
+  const { lines, logs } = dailyData(focus.slice(0, 7));
+  const data: LineQuality[] = lines.map((l) => {
+    const log = logs[`${l.id}|${focus}`];
+    const running = log && !log.closed && !log.stopped ? (l.slots.find((s) => s.allocationId === log.allocationId)?.customer ?? "an order") : null;
+    const lots = st.dayLogs
+      .filter((d) => d.lineId === l.id)
+      .flatMap((d) => (d.batches ?? []).map((b) => ({ lotNo: b.lotNo, moisturePct: b.moisturePct, qc: b.qc, date: d.date })))
+      .sort((a, b) => b.lotNo.localeCompare(a.lotNo))
+      .slice(0, 6);
+    return { code: l.code, running: running ? `${running} · ${l.slots.find((s) => s.allocationId === log?.allocationId)?.product ?? ""}` : null, series: lineReadings(l.code, focus, undefined, l.code === "SD01"), alerts: defaultAlerts(l.code), lots };
+  });
+  return (
+    <>
+      <LineQualityBoard lines={data} />
+      {months.length === 0 && null}
+    </>
+  );
 }

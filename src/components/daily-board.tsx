@@ -143,7 +143,7 @@ export function DailyBoard({
 }
 
 // What each line is doing right now, in plain words: the order, the product, since when, and how far along.
-function NowRunning({ lines, logs, days, todayIso, onOpen }: { lines: DailyLine[]; logs: Record<string, DayLogView>; days: string[]; todayIso: string; onOpen: (lineId: number, date: string) => void }) {
+export function NowRunning({ lines, logs, days, todayIso, onOpen, month }: { lines: DailyLine[]; logs: Record<string, DayLogView>; days: string[]; todayIso: string; onOpen?: (lineId: number, date: string) => void; month?: string }) {
   const inMonth = days.includes(todayIso);
   return (
     <section>
@@ -163,7 +163,12 @@ function NowRunning({ lines, logs, days, todayIso, onOpen }: { lines: DailyLine[
           const daysLeft = slot && l.dayCapacity ? Math.ceil(left / l.dayCapacity) : 0;
           const tone = state === "running" ? "border-brand-600" : state === "stopped" ? "border-red-600" : state === "closed" ? "border-emerald-600" : "border-stone-300";
           return (
-            <button key={l.id} type="button" onClick={() => onOpen(l.id, date)} className={cx("border border-stone-300 border-l-[3px] bg-white p-3 text-left hover:bg-stone-50", tone)}>
+            <CardShell
+              key={l.id}
+              onClick={onOpen ? () => onOpen(l.id, date) : undefined}
+              href={onOpen ? undefined : `/plan?tab=daily${month ? `&month=${month}` : ""}`}
+              className={cx("border border-stone-300 border-l-[3px] bg-white p-3 text-left hover:bg-stone-50", tone)}
+            >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-[15px] font-semibold text-stone-900">{l.code}</span>
                 <span className={cx("font-mono text-[10px] uppercase tracking-[0.12em]", state === "running" ? "text-brand-600" : state === "stopped" ? "text-red-700" : state === "closed" ? "text-emerald-700" : "text-stone-400")}>
@@ -194,7 +199,7 @@ function NowRunning({ lines, logs, days, todayIso, onOpen }: { lines: DailyLine[
               ) : (
                 <div className="mt-1 text-[13px] text-stone-500">Idle, no order planned</div>
               )}
-            </button>
+            </CardShell>
           );
         })}
       </div>
@@ -314,6 +319,20 @@ function Batches({ log, canEdit, onTotal }: { log: DayLogView; canEdit: boolean;
       )}
       <p className="mt-1 text-[11px] text-stone-500">A batch is one dryer run or packing lot. Its lot number goes on the bags, so a shipment can be traced back to this line and day.</p>
     </section>
+  );
+}
+
+function CardShell({ onClick, href, className, children }: { onClick?: () => void; href?: string; className: string; children: React.ReactNode }) {
+  if (href)
+    return (
+      <Link href={href} className={cx("block", className)}>
+        {children}
+      </Link>
+    );
+  return (
+    <button type="button" onClick={onClick} className={className}>
+      {children}
+    </button>
   );
 }
 
