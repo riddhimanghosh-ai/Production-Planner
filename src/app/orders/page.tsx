@@ -227,7 +227,7 @@ function Approvals({ queue, mineCount, viewer }: { queue: ReturnType<typeof appr
               <th className={tbl.thR}>Tonnes</th>
               <th className={tbl.thR}>Value</th>
               <th className={tbl.thR}>Margin</th>
-              <th className={tbl.th}>COO check: capacity and bean cost</th>
+              <th className={tbl.th}>COO check: capacity and input costs</th>
               <th className={tbl.th}>CFO</th>
               <th className={tbl.th}>COO</th>
               <th className={tbl.thR}>Waiting</th>

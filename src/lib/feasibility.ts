@@ -32,6 +32,8 @@ export type Feasibility = {
     minPct: number;
     risk: "low" | "watch" | "high";
     note: string;
+    // Every input cost per kg of product: when the order was priced vs today.
+    costs: { label: string; then: number | null; now: number; share: number }[];
   } | null;
   perMonth: { month: string; need: number; lines: { code: string; free: number; freeTotal: number; take: number }[]; short: number; fitsWithMix: boolean }[];
   suggestion: string | null;
@@ -99,7 +101,21 @@ function beanCheck(order: Order, lines: OrderLine[]): Feasibility["bean"] {
   const note = fixed
     ? `Bean price fixed with the supplier at ₹${pricedAt}/kg, so market moves don't hit this order.`
     : `Not fixed: every ₹10/kg rise in ${ORIGINS[order.beanOrigin as Origin] ?? order.beanOrigin} beans costs about ₹${Math.round(today.reduce((a, m) => a + m.greenBeanKg, 0) * 10).toLocaleString("en-IN")}.`;
+  // Tonnes-weighted per-kg cost by item, today and in the snapshot taken when the order was sent.
+  const kgOf = (m: MarginResult) => m.revenue / Math.max(1, m.priceInrPerKg);
+  const totalKg = today.reduce((a, m) => a + kgOf(m), 0) || 1;
+  const clean = (label: string) => label.replace(/ \(.*\)$/, "");
+  const nowBy: Record<string, number> = {};
+  for (const m of today) for (const c of m.lines) nowBy[clean(c.label)] = (nowBy[clean(c.label)] ?? 0) + (c.perKg * kgOf(m)) / totalKg;
+  const thenBy: Record<string, number> = {};
+  const snapLines = Object.values((snap?.byLine ?? {}) as Record<number, MarginResult>);
+  const snapKg = snapLines.reduce((a, m) => a + kgOf(m), 0);
+  if (snapKg) for (const m of snapLines) for (const c of m.lines ?? []) thenBy[clean(c.label)] = (thenBy[clean(c.label)] ?? 0) + (c.perKg * kgOf(m)) / snapKg;
+  const costPerKg = Object.values(nowBy).reduce((a, v) => a + v, 0) || 1;
+  const costs = Object.entries(nowBy).map(([label, now]) => ({ label, then: snapKg ? (thenBy[label] ?? 0) : null, now, share: (now / costPerKg) * 100 }));
+
   return {
+    costs,
     origin: order.beanOrigin,
     grade: order.gbGrade,
     fixed,

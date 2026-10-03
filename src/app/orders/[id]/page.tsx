@@ -135,10 +135,14 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
               </tr>
               {feas.bean && (
                 <tr>
-                  <td className={cx(tbl.td, "bg-stone-50 text-stone-500")}>Green bean cost</td>
+                  <td className={cx(tbl.td, "bg-stone-50 text-stone-500")}>Input costs</td>
                   <td className={cx(tbl.td, feas.bean.risk === "high" ? "text-red-700" : "text-stone-900")}>
-                    {feas.bean.fixed ? `Fixed at ₹${feas.bean.pricedAt}/kg` : `Not fixed, market ₹${feas.bean.marketNow}/kg`} · beans are {feas.bean.shareOfCost.toFixed(0)}% of cost · margin at today&apos;s bean price{" "}
-                    {feas.bean.marginToday.toFixed(1)}%
+                    Beans {feas.bean.fixed ? `fixed at ₹${feas.bean.pricedAt}/kg` : `not fixed, market ₹${feas.bean.marketNow}/kg`} ({feas.bean.shareOfCost.toFixed(0)}% of cost)
+                    {feas.bean.costs
+                      .filter((c) => c.then != null && Math.abs(c.now - c.then) >= 0.5)
+                      .map((c) => ` · ${c.label} ${c.now > (c.then ?? 0) ? "up" : "down"} ₹${Math.round(Math.abs(c.now - (c.then ?? 0)))}/kg`)
+                      .join("")}{" "}
+                    · margin at today&apos;s costs {feas.bean.marginToday.toFixed(1)}%
                   </td>
                 </tr>
               )}
@@ -403,7 +407,44 @@ function CooCheck({ feas }: { feas: Feasibility }) {
 
       {feas.bean && (
         <section>
-          <div className={eyebrow}>{feas.line.ok ? "2" : "3"} · Green bean cost</div>
+          <div className={eyebrow}>{feas.line.ok ? "2" : "3"} · Input costs: green beans, chicory, making, packing, freight</div>
+          <div className="mb-3 overflow-x-auto border border-stone-300 bg-white">
+            <table className="tabular w-full min-w-[640px] text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tbl.th}>Cost, per kg of product</th>
+                  <th className={tbl.thR}>When priced</th>
+                  <th className={tbl.thR}>Today</th>
+                  <th className={tbl.thR}>Change</th>
+                  <th className={tbl.thR}>Share of cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {feas.bean.costs.map((c) => {
+                  const diff = c.then == null ? 0 : c.now - c.then;
+                  return (
+                    <tr key={c.label} className={tbl.tr}>
+                      <td className={cx(tbl.td, "font-medium")}>{c.label}</td>
+                      <td className={cx(tbl.tdR, "text-stone-600")}>{c.then == null ? "–" : `₹${Math.round(c.then).toLocaleString("en-IN")}`}</td>
+                      <td className={tbl.tdR}>₹{Math.round(c.now).toLocaleString("en-IN")}</td>
+                      <td className={cx(tbl.tdR, Math.abs(diff) < 0.5 ? "text-stone-400" : diff > 0 ? "font-semibold text-red-700" : "font-semibold text-emerald-700")}>
+                        {Math.abs(diff) < 0.5 ? "no change" : `${diff > 0 ? "+" : "−"}₹${Math.round(Math.abs(diff))}`}
+                      </td>
+                      <td className={tbl.tdR}>{c.share.toFixed(0)}%</td>
+                    </tr>
+                  );
+                })}
+                <tr className="bg-stone-50 font-semibold">
+                  <td className={tbl.td}>Total cost</td>
+                  <td className={tbl.tdR}>{feas.bean.costs.some((c) => c.then == null) ? "–" : `₹${Math.round(feas.bean.costs.reduce((a, c) => a + (c.then ?? 0), 0)).toLocaleString("en-IN")}`}</td>
+                  <td className={tbl.tdR}>₹{Math.round(feas.bean.costs.reduce((a, c) => a + c.now, 0)).toLocaleString("en-IN")}</td>
+                  <td className={tbl.tdR} />
+                  <td className={tbl.tdR}>100%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div className={eyebrow}>Green beans, the biggest input</div>
           <div className="border border-stone-300 bg-white">
             <table className="tabular w-full text-[13px]">
               <tbody>
@@ -438,7 +479,7 @@ function CooCheck({ feas }: { feas: Feasibility }) {
                 <tr>
                   <td className={cx(tbl.td, "bg-stone-50 text-stone-500")}>Margin</td>
                   <td className={cx(tbl.td, "font-semibold", feas.bean.marginToday < feas.bean.minPct ? "text-red-700" : "text-emerald-700")}>
-                    {feas.bean.marginToday.toFixed(1)}% at today&apos;s bean price
+                    {feas.bean.marginToday.toFixed(1)}% at today&apos;s costs
                     {feas.bean.marginThen != null && <span className="font-normal text-stone-500"> (was {feas.bean.marginThen.toFixed(1)}% when priced)</span>} · minimum {feas.bean.minPct}%
                   </td>
                 </tr>
