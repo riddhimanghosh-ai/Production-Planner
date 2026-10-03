@@ -46,7 +46,7 @@ export function lineReadings(lineCode: string, date: string, upToMinute = 14 * 6
     for (let m = start; m <= upToMinute; m += 10) {
       // One line drifts upward in moisture through the afternoon (no pull back to the middle), to show a prediction.
       const drifting = drift && metric.key === "moisture" && m > 11 * 60;
-      v += (rand() - 0.5) * band * (drifting ? 0.04 : 0.08) + (drifting ? band * 0.022 : (mid - v) * 0.05);
+      v += (rand() - 0.5) * band * (drifting ? 0.04 : 0.08) + (drifting ? band * 0.014 : (mid - v) * 0.05);
       points.push({ t: slot(m), v: Number(v.toFixed(metric.decimals + 1)) });
     }
     const now = points.at(-1)!.v;
