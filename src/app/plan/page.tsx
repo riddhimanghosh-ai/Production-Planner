@@ -221,6 +221,7 @@ function Daily({ months, monthParam, canEdit }: { months: string[]; monthParam?:
       madeT: d.madeT,
       closed: !!d.closedAt,
       stopped: !!d.stopped,
+      batches: (d.batches ?? []).map((b) => ({ ...b })),
     };
   }
   const set = loadSettings();

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { applyPlanMove, closeDayAction, notRunningAction, resumeDayAction, startDayAction } from "@/app/actions";
+import { addBatchAction, applyPlanMove, batchQcAction, closeDayAction, notRunningAction, resumeDayAction, startDayAction } from "@/app/actions";
 import { addMonths, monthLabel } from "@/lib/domain";
 import { ProductChip } from "./plan-calendar";
 import { buttonClass, cx, tbl } from "./ui";
@@ -19,7 +19,9 @@ export type DayLogView = {
   madeT: number | null;
   closed: boolean;
   stopped: boolean;
+  batches: BatchView[];
 };
+export type BatchView = { id: number; lotNo: string; start: string; end: string; outputKg: number; qc: "PENDING" | "RELEASED" | "HOLD"; moisturePct: number | null; note: string };
 
 const t = (n: number) => `${n.toLocaleString("en-IN", { maximumFractionDigits: 1 })} t`;
 const time = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
@@ -200,6 +202,121 @@ function NowRunning({ lines, logs, days, todayIso, onOpen }: { lines: DailyLine[
   );
 }
 
+// The day's output batch by batch. Each batch gets a lot number; QC releases it (or holds it) before it can ship.
+function Batches({ log, canEdit, onTotal }: { log: DayLogView; canEdit: boolean; onTotal: (kg: number) => void }) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [kg, setKg] = useState("");
+  const [from, setFrom] = useState("07:00");
+  const [to, setTo] = useState("12:00");
+  const [note, setNote] = useState("");
+  const total = log.batches.reduce((a, b) => a + b.outputKg, 0);
+  const qcLabel = { PENDING: ["QC pending", "text-stone-500"], RELEASED: ["Released", "text-emerald-700"], HOLD: ["On hold", "text-red-700"] } as const;
+  const act = (fn: () => Promise<{ error: string | null }>) => start(async () => setError((await fn()).error));
+
+  return (
+    <section className="mt-6">
+      <div className="flex items-baseline justify-between">
+        <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-stone-500">Batches today</div>
+        {total > 0 && (
+          <div className="text-[12px] text-stone-600">
+            {log.batches.length} batches · {Math.round(total / 100) / 10} t
+          </div>
+        )}
+      </div>
+      {error && <p className="mt-2 border border-red-300 bg-red-50 px-2 py-1 text-[12px] text-red-800">{error}</p>}
+      <table className={cx(tbl.table, "mt-2 border border-stone-300")}>
+        <thead>
+          <tr>
+            <th className={tbl.th}>Lot no.</th>
+            <th className={tbl.th}>Time</th>
+            <th className={tbl.thR}>Output</th>
+            <th className={tbl.th}>QC</th>
+          </tr>
+        </thead>
+        <tbody>
+          {log.batches.length === 0 && (
+            <tr>
+              <td colSpan={4} className={cx(tbl.td, "text-stone-500")}>
+                No batches logged yet.
+              </td>
+            </tr>
+          )}
+          {log.batches.map((b) => (
+            <tr key={b.id} className={cx(tbl.tr, b.qc === "HOLD" && "bg-red-50/50")}>
+              <td className={cx(tbl.td, "font-mono text-[12px]")}>{b.lotNo}</td>
+              <td className={cx(tbl.td, "whitespace-nowrap text-stone-600")}>
+                {b.start}–{b.end}
+              </td>
+              <td className={cx(tbl.tdR, "font-semibold")}>{b.outputKg.toLocaleString("en-IN")} kg</td>
+              <td className={tbl.td}>
+                <div className={cx("font-semibold", qcLabel[b.qc][1])}>
+                  {qcLabel[b.qc][0]}
+                  {b.moisturePct != null && <span className="ml-1 font-normal text-stone-500">· moisture {b.moisturePct}%</span>}
+                </div>
+                {b.note && <div className="text-[11px] text-stone-500">{b.note}</div>}
+                {canEdit && (
+                  <div className="mt-1 flex gap-2 text-[11px]">
+                    {b.qc !== "RELEASED" && (
+                      <button type="button" disabled={pending} onClick={() => act(() => batchQcAction(log.id, b.id, "RELEASED", b.moisturePct))} className="text-emerald-700 underline underline-offset-2">
+                        Release
+                      </button>
+                    )}
+                    {b.qc !== "HOLD" && (
+                      <button type="button" disabled={pending} onClick={() => act(() => batchQcAction(log.id, b.id, "HOLD", b.moisturePct))} className="text-red-700 underline underline-offset-2">
+                        Hold
+                      </button>
+                    )}
+                  </div>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {canEdit && !log.closed && (
+        <div className="mt-2 flex flex-wrap items-end gap-2 border border-stone-300 bg-stone-50 p-2 text-[12px]">
+          <label className="block">
+            <span className="text-stone-500">Output (kg)</span>
+            <input type="number" min="0" step="10" value={kg} onChange={(e) => setKg(e.target.value)} className={cx(tbl.input, "block w-24 py-1 text-right")} />
+          </label>
+          <label className="block">
+            <span className="text-stone-500">From</span>
+            <input type="time" value={from} onChange={(e) => setFrom(e.target.value)} className={cx(tbl.input, "block py-1")} />
+          </label>
+          <label className="block">
+            <span className="text-stone-500">To</span>
+            <input type="time" value={to} onChange={(e) => setTo(e.target.value)} className={cx(tbl.input, "block py-1")} />
+          </label>
+          <label className="block min-w-32 flex-1">
+            <span className="text-stone-500">Note</span>
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="optional" className={cx(tbl.input, "block w-full py-1")} />
+          </label>
+          <button
+            type="button"
+            disabled={pending || !(Number(kg) > 0)}
+            onClick={() =>
+              act(async () => {
+                const r = await addBatchAction(log.id, Number(kg), from, to, note);
+                if (!r.error) {
+                  onTotal(total + Number(kg));
+                  setKg("");
+                  setNote("");
+                }
+                return r;
+              })
+            }
+            className={buttonClass("primary", "sm")}
+          >
+            Add batch
+          </button>
+        </div>
+      )}
+      <p className="mt-1 text-[11px] text-stone-500">A batch is one dryer run or packing lot. Its lot number goes on the bags, so a shipment can be traced back to this line and day.</p>
+    </section>
+  );
+}
+
 // Plan every day of the month for one line: closed days keep what was made; the rest of the orders'
 // tonnes (including any short days) are spread over the open days at day capacity. Whatever does not
 // fit before month end is flagged with a button to move it to next month.
@@ -354,6 +471,12 @@ function LineRow({ l, days, logs, month, canEdit, changeoverHours, onOpen }: { l
                     </tr>
                   </tbody>
                 </table>
+                {log && log.batches.length > 0 && (
+                  <div className="text-[10px] text-stone-500">
+                    {log.batches.length} batch{log.batches.length === 1 ? "" : "es"} · {Math.round(log.batches.reduce((a, b) => a + b.outputKg, 0) / 100) / 10} t
+                    {log.batches.some((b) => b.qc === "HOLD") && <span className="ml-1 font-semibold text-red-700">· QC hold</span>}
+                  </div>
+                )}
                 {p.changeover && !log?.closed && (
                   <div className="text-[10px] font-semibold text-stone-700" title="Cleaning time when the line switches product or blend">
                     Changeover {p.changeover.label} · {p.changeover.hours} h · −{p.changeover.lostMt} t
@@ -382,7 +505,8 @@ function DayDrawer({ line, date, log, canEdit, onClose }: { line: DailyLine; dat
   const [cap, setCap] = useState(String(line.dayCapacity));
   const [reason, setReason] = useState(REASONS[0]);
   const [note, setNote] = useState("");
-  const [made, setMade] = useState(String(log?.madeT ?? line.dayCapacity));
+  const batchKg = (log?.batches ?? []).reduce((a, b) => a + b.outputKg, 0);
+  const [made, setMade] = useState(String(log?.madeT ?? (batchKg ? Math.round(batchKg / 100) / 10 : line.dayCapacity)));
   const [choice, setChoice] = useState<"run" | "stop">("run");
   const isShort = made !== "" && Number(made) < line.dayCapacity - 0.05;
   const [stopReason, setStopReason] = useState(STOP_REASONS[0]);
@@ -531,12 +655,17 @@ function DayDrawer({ line, date, log, canEdit, onClose }: { line: DailyLine; dat
               </table>
             </section>
 
+            <Batches log={log} canEdit={canEdit} onTotal={(kg) => setMade(String(Math.round(kg / 100) / 10))} />
+
             {canEdit && (
               <section className="mt-6 space-y-3 border border-stone-300 p-4">
                 <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-stone-500">{log.closed ? "Correct the day" : "End of day"}</div>
                 <div className="flex items-center gap-2 text-[13px]">
                   <input type="number" min="0" step="0.1" value={made} onChange={(e) => setMade(e.target.value)} className={cx(tbl.input, "w-24 py-1 text-right")} aria-label="Tonnes made today" />
-                  <span className="text-stone-500">t made today, plan was {t(line.dayCapacity)}</span>
+                  <span className="text-stone-500">
+                    t made today, plan was {t(line.dayCapacity)}
+                    {batchKg > 0 && ` · batches add up to ${Math.round(batchKg / 100) / 10} t`}
+                  </span>
                 </div>
                 {isShort && (
                   <div className="flex flex-wrap items-center gap-2 text-[13px]">

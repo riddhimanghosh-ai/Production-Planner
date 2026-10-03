@@ -113,7 +113,11 @@ export type DayLog = {
   madeT: number | null;
   closedAt: Date | null;
   stopped?: boolean; // line marked "not running" for the whole day
+  batches?: Batch[]; // the day's output, batch by batch, each with a lot number for traceability
 };
+
+// One production batch: a dryer run or packing lot. Lot numbers trace a shipment back to the day and line.
+export type Batch = { id: number; lotNo: string; start: string; end: string; outputKg: number; qc: "PENDING" | "RELEASED" | "HOLD"; moisturePct: number | null; note: string };
 
 export type Approval = {
   id: number;

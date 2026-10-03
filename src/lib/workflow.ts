@@ -1,18 +1,7 @@
 import { nextId, store, transaction } from "@/data/store";
-import type { Order, OrderLine, Shipment, Sku } from "@/data/types";
+import type { Batch, Order, OrderLine, Shipment, Sku } from "@/data/types";
 import { capacityAt, extraChangeoverMt, freeAt, linesFor, loadAt, loadCapacityState, packLoadAt, productFreeAt, type CapacityState, type Issue } from "./capacity";
-import {
-  APPROVER_FOCUS,
-  can,
-  coffeeShare,
-  formatDate,
-  monthLabel,
-  planningStart,
-  PRODUCT_TYPES,
-  todayIso,
-  type ApproverRole,
-  type Role,
-} from "./domain";
+import { APPROVER_FOCUS, can, coffeeShare, formatDate, monthLabel, planningStart, PRODUCT_TYPES, todayIso, type ApproverRole, type Role } from "./domain";
 import { computeMargin, rollUp, type MarginResult, type OrderMargin } from "./margin";
 import { inventoryProjection } from "./inventory";
 import { describeMaterial, earliestMaterialMonth, requirementsFor } from "./procurement";
@@ -155,7 +144,13 @@ export function planAvailability(productType: string, months: string[], need: nu
   const needFor = (month: string) => (typeof need === "number" ? need : (need[month] ?? 0));
   const perMonth: MonthAvailability[] = months.map((month) => {
     // Free space, less any extra cleaning this order would add by bringing a new product or blend onto the line.
-    const lines = capable.map((l) => ({ lineId: l.id, code: l.code, name: l.name, capacity: capacityAt(state, l.id, month), free: Math.max(0, productFreeAt(state, l.id, productType, month) - extraChangeoverMt(state, l.id, month, productType, blend)) }));
+    const lines = capable.map((l) => ({
+      lineId: l.id,
+      code: l.code,
+      name: l.name,
+      capacity: capacityAt(state, l.id, month),
+      free: Math.max(0, productFreeAt(state, l.id, productType, month) - extraChangeoverMt(state, l.id, month, productType, blend)),
+    }));
     let left = needFor(month);
     const proposal: { lineId: number; quantityMt: number }[] = [];
     for (const l of [...lines].sort((a, b) => b.free - a.free)) {
@@ -742,7 +737,18 @@ export function startDay(lineId: number, date: string, allocationId: number | nu
   if (!(capacityT >= 0)) throw new WorkflowError("Capacity must be 0 or more");
   const st = store();
   if (st.dayLogs.some((d) => d.lineId === lineId && d.date === date)) throw new WorkflowError("This line is already locked for the day");
-  st.dayLogs.push({ id: nextId("dayLogs"), lineId, date, allocationId, capacityT, lockedAt: new Date(), lockedBy: actor(viewer, "PLANNER").name, events: [{ at: new Date(), by: actor(viewer, "PLANNER").name, capacityT, reason: "Day started" }], madeT: null, closedAt: null });
+  st.dayLogs.push({
+    id: nextId("dayLogs"),
+    lineId,
+    date,
+    allocationId,
+    capacityT,
+    lockedAt: new Date(),
+    lockedBy: actor(viewer, "PLANNER").name,
+    events: [{ at: new Date(), by: actor(viewer, "PLANNER").name, capacityT, reason: "Day started" }],
+    madeT: null,
+    closedAt: null,
+  });
   const line = st.lines.find((l) => l.id === lineId)?.code ?? "";
   const orderId = allocationId ? (st.allocations.find((a) => a.id === allocationId)?.orderId ?? null) : null;
   audit(viewer, "DAY_LOCKED", orderId, `${line} ${date}: started at ${capacityT} t/day`);
@@ -773,7 +779,19 @@ export function markNotRunning(lineId: number, date: string, reason: string, vie
     existing.events.push({ at: new Date(), by: actor(viewer, "PLANNER").name, capacityT: 0, reason: `Not running: ${reason.trim()}` });
     Object.assign(existing, { capacityT: 0, madeT: 0, closedAt: new Date(), stopped: true });
   } else {
-    st.dayLogs.push({ id: nextId("dayLogs"), lineId, date, allocationId: null, capacityT: 0, lockedAt: new Date(), lockedBy: actor(viewer, "PLANNER").name, events: [{ at: new Date(), by: actor(viewer, "PLANNER").name, capacityT: 0, reason: `Not running: ${reason.trim()}` }], madeT: 0, closedAt: new Date(), stopped: true });
+    st.dayLogs.push({
+      id: nextId("dayLogs"),
+      lineId,
+      date,
+      allocationId: null,
+      capacityT: 0,
+      lockedAt: new Date(),
+      lockedBy: actor(viewer, "PLANNER").name,
+      events: [{ at: new Date(), by: actor(viewer, "PLANNER").name, capacityT: 0, reason: `Not running: ${reason.trim()}` }],
+      madeT: 0,
+      closedAt: new Date(),
+      stopped: true,
+    });
   }
   audit(viewer, "DAY_STOPPED", null, `${line} ${date}: not running (${reason.trim()})`);
 }
@@ -786,6 +804,37 @@ export function resumeDay(id: number, viewer: Viewer) {
   st.dayLogs = st.dayLogs.filter((x) => x.id !== id);
   const line = st.lines.find((l) => l.id === d.lineId)?.code ?? "";
   audit(viewer, "DAY_RESUMED", null, `${line} ${d.date}: back to a normal day`);
+}
+
+// Lot number: line, date and a running number, e.g. SD01-261108-02.
+function nextLotNo(d: { lineId: number; date: string; batches?: Batch[] }) {
+  const line = store().lines.find((l) => l.id === d.lineId)?.code ?? "L";
+  const [y, m, day] = d.date.split("-");
+  return `${line}-${y.slice(2)}${m}${day}-${String((d.batches?.length ?? 0) + 1).padStart(2, "0")}`;
+}
+
+export function addBatch(dayId: number, outputKg: number, start: string, end: string, note: string, viewer: Viewer) {
+  if (!can(viewer.role, PLANNERS)) throw new WorkflowError("Only the COO or production planner can log batches");
+  if (!(outputKg > 0)) throw new WorkflowError("Enter the batch output");
+  const d = dayLog(dayId);
+  if (d.stopped) throw new WorkflowError("This line is marked not running today");
+  d.batches ??= [];
+  const batch: Batch = { id: nextId("batches"), lotNo: nextLotNo(d), start, end, outputKg: Math.round(outputKg), qc: "PENDING", moisturePct: null, note: note.trim() };
+  d.batches.push(batch);
+  const line = store().lines.find((l) => l.id === d.lineId)?.code ?? "";
+  audit(viewer, "BATCH", d.allocationId ? (store().allocations.find((a) => a.id === d.allocationId)?.orderId ?? null) : null, `${line} ${d.date}: batch ${batch.lotNo}, ${outputKg} kg`);
+  return batch;
+}
+
+export function setBatchQc(dayId: number, batchId: number, qc: Batch["qc"], moisturePct: number | null, viewer: Viewer) {
+  if (!can(viewer.role, PLANNERS)) throw new WorkflowError("Only the COO or production planner can release batches");
+  const d = dayLog(dayId);
+  const b = d.batches?.find((x) => x.id === batchId);
+  if (!b) throw new WorkflowError("Batch not found");
+  b.qc = qc;
+  b.moisturePct = moisturePct;
+  const line = store().lines.find((l) => l.id === d.lineId)?.code ?? "";
+  audit(viewer, "BATCH_QC", null, `${line} ${b.lotNo}: ${qc === "RELEASED" ? "released" : qc === "HOLD" ? "on hold" : "QC pending"}${moisturePct != null ? `, moisture ${moisturePct}%` : ""}`);
 }
 
 export function closeDay(id: number, madeT: number, viewer: Viewer, reason = "") {

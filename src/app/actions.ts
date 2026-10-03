@@ -25,7 +25,9 @@ import {
   actor,
   carryOverShort,
   changeDayCapacity,
+  addBatch,
   closeDay,
+  setBatchQc,
   markNotRunning,
   resumeDay,
   recordProduction,
@@ -78,7 +80,10 @@ const orderSchema = z.object({
   currency: z.enum(CURRENCIES).catch("INR"),
   specNotes: z.string().max(2000).catch(""),
   spillOverride: z.string().max(1000).catch(""),
-  shipments: z.array(z.object({ month, quantityMt: z.number().min(0).max(100000) })).max(60).catch([]),
+  shipments: z
+    .array(z.object({ month, quantityMt: z.number().min(0).max(100000) }))
+    .max(60)
+    .catch([]),
   lines: z.array(lineSchema).max(60),
 });
 
@@ -279,6 +284,14 @@ export async function notRunningAction(lineId: number, date: string, reason: str
 
 export async function resumeDayAction(id: number) {
   return run((v) => resumeDay(Number(id), v));
+}
+
+export async function addBatchAction(dayId: number, outputKg: number, start: string, end: string, note: string) {
+  return run((v) => addBatch(Number(dayId), Number(outputKg), String(start ?? ""), String(end ?? ""), String(note ?? ""), v));
+}
+
+export async function batchQcAction(dayId: number, batchId: number, qc: "PENDING" | "RELEASED" | "HOLD", moisturePct: number | null) {
+  return run((v) => setBatchQc(Number(dayId), Number(batchId), qc, moisturePct == null || moisturePct === ("" as unknown) ? null : Number(moisturePct), v));
 }
 
 export async function closeDayAction(id: number, madeT: number, reason = "") {

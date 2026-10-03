@@ -10,6 +10,7 @@ import { getViewer } from "@/lib/role";
 import { loadSettings } from "@/lib/settings";
 import { orderFeasibility, type Feasibility } from "@/lib/feasibility";
 import { canEditOrder } from "@/lib/workflow";
+import { store } from "@/data/store";
 
 export default async function OrderPage({ params, searchParams }: PageProps<"/orders/[id]">) {
   const { id } = await params;
@@ -30,6 +31,13 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
   const slots = allocations.length ? allocations : lines.map((l) => ({ id: l.id, orderLineId: l.id, lineId: l.lineId, month: l.month, quantityMt: l.quantityMt, lineCode: l.lineCode }));
   const sentBack = approvals.filter((a) => a.status === "SENT_BACK");
   const feas = orderFeasibility(order.id);
+  // Lots made for this order: batches logged on days that were running one of its slots.
+  const st = store();
+  const slotIds = new Set(allocations.map((a) => a.id));
+  const lots = st.dayLogs
+    .filter((d) => d.allocationId && slotIds.has(d.allocationId))
+    .flatMap((d) => (d.batches ?? []).map((b) => ({ ...b, date: d.date, line: st.lines.find((l) => l.id === d.lineId)?.code ?? "" })))
+    .sort((a, b) => a.lotNo.localeCompare(b.lotNo));
 
   const tabs = [
     { key: "plan", label: "Production plan" },
@@ -160,43 +168,84 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
       <Tabs active={String(tab)} tabs={tabs.map((t) => ({ ...t, href: `/orders/${order.id}?tab=${t.key}` }))} />
 
       {tab === "plan" && (
-        <div className="overflow-x-auto rounded-md border border-stone-300 bg-white">
-          <table className="tabular w-full min-w-[560px] text-[13px]">
-            <thead>
-              <tr>
-                <th className={tbl.th}>Month</th>
-                <th className={tbl.th}>Line</th>
-                <th className={tbl.thR}>Tonnes</th>
-                <th className={tbl.th}>Line space</th>
-                <th className={tbl.th}>Materials</th>
-                <th className={tbl.thR}>Made</th>
-              </tr>
-            </thead>
-            <tbody>
-              {slots.map((a) => {
-                const cap = capacityAt(state, a.lineId, a.month);
-                const used = loadAt(state, a.lineId, a.month);
-                const ms = shorts.filter((x) => x.month === a.month);
-                return (
-                  <tr key={a.id} className={tbl.tr}>
-                    <td className={tbl.td}>{monthLabel(a.month)}</td>
-                    <td className={tbl.td}>{a.lineCode}</td>
-                    <td className={tbl.tdR}>{a.quantityMt.toLocaleString("en-IN")}</td>
-                    <td className={cx(tbl.td, used > cap + 0.05 ? "font-semibold text-red-700" : "text-emerald-700")}>{used > cap + 0.05 ? `Over by ${(used - cap).toFixed(0)} t` : "OK"}</td>
-                    <td className={cx(tbl.td, ms.length ? "font-semibold text-amber-700" : "text-emerald-700")}>{ms.length ? "To buy" : "OK"}</td>
-                    <td className={tbl.tdR}>
-                      {(() => {
-                        const made = "producedMt" in a ? (a.producedMt as number | undefined) : undefined;
-                        if (made == null) return <span className="text-stone-400">–</span>;
-                        return <span className={made >= a.quantityMt - 0.05 ? "font-semibold text-emerald-700" : "font-semibold text-red-700"}>{made.toLocaleString("en-IN")}</span>;
-                      })()}
+        <>
+          <div className="overflow-x-auto rounded-md border border-stone-300 bg-white">
+            <table className="tabular w-full min-w-[560px] text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tbl.th}>Month</th>
+                  <th className={tbl.th}>Line</th>
+                  <th className={tbl.thR}>Tonnes</th>
+                  <th className={tbl.th}>Line space</th>
+                  <th className={tbl.th}>Materials</th>
+                  <th className={tbl.thR}>Made</th>
+                </tr>
+              </thead>
+              <tbody>
+                {slots.map((a) => {
+                  const cap = capacityAt(state, a.lineId, a.month);
+                  const used = loadAt(state, a.lineId, a.month);
+                  const ms = shorts.filter((x) => x.month === a.month);
+                  return (
+                    <tr key={a.id} className={tbl.tr}>
+                      <td className={tbl.td}>{monthLabel(a.month)}</td>
+                      <td className={tbl.td}>{a.lineCode}</td>
+                      <td className={tbl.tdR}>{a.quantityMt.toLocaleString("en-IN")}</td>
+                      <td className={cx(tbl.td, used > cap + 0.05 ? "font-semibold text-red-700" : "text-emerald-700")}>{used > cap + 0.05 ? `Over by ${(used - cap).toFixed(0)} t` : "OK"}</td>
+                      <td className={cx(tbl.td, ms.length ? "font-semibold text-amber-700" : "text-emerald-700")}>{ms.length ? "To buy" : "OK"}</td>
+                      <td className={tbl.tdR}>
+                        {(() => {
+                          const made = "producedMt" in a ? (a.producedMt as number | undefined) : undefined;
+                          if (made == null) return <span className="text-stone-400">–</span>;
+                          return <span className={made >= a.quantityMt - 0.05 ? "font-semibold text-emerald-700" : "font-semibold text-red-700"}>{made.toLocaleString("en-IN")}</span>;
+                        })()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {lots.length > 0 && (
+            <div className="mt-3 overflow-x-auto rounded-md border border-stone-300 bg-white">
+              <table className="tabular w-full min-w-[560px] text-[13px]">
+                <thead>
+                  <tr>
+                    <th className={tbl.th}>Lot no.</th>
+                    <th className={tbl.th}>Made on</th>
+                    <th className={tbl.th}>Line</th>
+                    <th className={tbl.thR}>Output</th>
+                    <th className={tbl.th}>QC</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lots.map((b) => (
+                    <tr key={b.id} className={cx(tbl.tr, b.qc === "HOLD" && "bg-red-50/50")}>
+                      <td className={cx(tbl.td, "font-mono text-[12px]")}>{b.lotNo}</td>
+                      <td className={cx(tbl.td, "whitespace-nowrap")}>{formatDate(b.date)}</td>
+                      <td className={tbl.td}>{b.line}</td>
+                      <td className={cx(tbl.tdR, "font-semibold")}>{b.outputKg.toLocaleString("en-IN")} kg</td>
+                      <td className={cx(tbl.td, "font-semibold", b.qc === "RELEASED" ? "text-emerald-700" : b.qc === "HOLD" ? "text-red-700" : "text-stone-500")}>
+                        {b.qc === "RELEASED" ? "Released" : b.qc === "HOLD" ? "On hold" : "QC pending"}
+                        {b.note && <span className="ml-1 font-normal text-stone-500">· {b.note}</span>}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="bg-stone-50 font-semibold">
+                    <td className={tbl.td} colSpan={3}>
+                      {lots.length} lots
+                    </td>
+                    <td className={tbl.tdR}>{lots.reduce((a, b) => a + b.outputKg, 0).toLocaleString("en-IN")} kg</td>
+                    <td className={cx(tbl.td, lots.some((b) => b.qc !== "RELEASED") ? "text-red-700" : "text-emerald-700")}>
+                      {lots.filter((b) => b.qc === "RELEASED").length} of {lots.length} released
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </tbody>
+              </table>
+              <p className="border-t border-stone-200 px-3 py-1.5 text-[11px] text-stone-500">Only released lots can ship. Lot numbers trace a bag back to the line and day it was made.</p>
+            </div>
+          )}
+        </>
       )}
 
       {tab === "coo" && feas && <CooCheck feas={feas} />}

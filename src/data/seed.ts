@@ -493,7 +493,35 @@ function seedDailyLogs(st: Store) {
         madeT = Math.round(dayCap * 0.75 * 10) / 10;
       }
       if (last && line.code === "SD01") madeT = null; // today's shift, still running
-      st.dayLogs.push({ id: nextId("dayLogs"), lineId: line.id, date, allocationId: slot.id, capacityT, lockedAt: at(date, "07:00"), lockedBy: planner, events, madeT, closedAt: madeT == null ? null : at(date, "19:00") });
+      // Two batches a day with lot numbers; one lot on the line's short day is held for a moisture retest.
+      const lotNo = (n: number) => `${line.code}-${date.slice(2, 4)}${date.slice(5, 7)}${date.slice(8, 10)}-${String(n).padStart(2, "0")}`;
+      const kg = Math.round((madeT ?? capacityT) * 1000);
+      const batches = [
+        { id: nextId("batches"), lotNo: lotNo(1), start: "07:10", end: "12:30", outputKg: Math.round(kg * 0.52), qc: "RELEASED" as const, moisturePct: 3.4, note: "" },
+        {
+          id: nextId("batches"),
+          lotNo: lotNo(2),
+          start: "12:45",
+          end: "18:40",
+          outputKg: kg - Math.round(kg * 0.52),
+          qc: (madeT != null && madeT < capacityT - 0.05 ? "HOLD" : "RELEASED") as "HOLD" | "RELEASED",
+          moisturePct: madeT != null && madeT < capacityT - 0.05 ? 4.6 : 3.6,
+          note: madeT != null && madeT < capacityT - 0.05 ? "Moisture above 4.5%, retest" : "",
+        },
+      ];
+      st.dayLogs.push({
+        id: nextId("dayLogs"),
+        lineId: line.id,
+        date,
+        allocationId: slot.id,
+        capacityT,
+        lockedAt: at(date, "07:00"),
+        lockedBy: planner,
+        events,
+        madeT,
+        closedAt: madeT == null ? null : at(date, "19:00"),
+        batches: madeT == null ? [batches[0]] : batches,
+      });
       if (madeT != null) slot.producedMt = Math.round(((slot.producedMt ?? 0) + madeT) * 10) / 10;
     });
     slot.producedAt = new Date();
