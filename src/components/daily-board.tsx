@@ -7,7 +7,7 @@ import { addMonths, monthLabel } from "@/lib/domain";
 import { ProductChip } from "./plan-calendar";
 import { buttonClass, cx, tbl } from "./ui";
 
-export type DaySlot = { allocationId: number; customer: string; product: string; productType: string; blend: string; planned: number; made: number };
+export type DaySlot = { allocationId: number; orderId: number; ref: string; customer: string; product: string; productType: string; blend: string; planned: number; made: number };
 export type DailyLine = { id: number; code: string; dayCapacity: number; monthCapacity: number; runDays: number[]; slots: DaySlot[] };
 export type DayLogView = {
   id: number;
@@ -50,6 +50,7 @@ export function DailyBoard({
   logs,
   canEdit,
   changeoverHours,
+  todayIso,
 }: {
   month: string;
   months: string[];
@@ -58,6 +59,7 @@ export function DailyBoard({
   logs: Record<string, DayLogView>;
   canEdit: boolean;
   changeoverHours: Record<string, number>;
+  todayIso: string;
 }) {
   const [open, setOpen] = useState<{ lineId: number; date: string } | null>(null);
   // Open on the running day (or the next day still to make), just after the sticky line column.
@@ -73,9 +75,11 @@ export function DailyBoard({
   const line = open ? lines.find((l) => l.id === open.lineId) : null;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      <NowRunning lines={lines} logs={logs} days={days} todayIso={todayIso} onOpen={(lineId, date) => setOpen({ lineId, date })} />
+
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex border border-stone-300 text-[12px]">
+        <div className="flex max-w-full overflow-x-auto border border-stone-300 text-[12px]">
           {months.map((m) => (
             <Link key={m} href={`/plan?tab=daily&month=${m}`} className={cx("border-r border-stone-300 px-2 py-1 last:border-r-0", m === month ? "bg-stone-900 text-white" : "hover:bg-stone-50")}>
               {monthLabel(m)}
@@ -133,6 +137,66 @@ export function DailyBoard({
         />
       )}
     </div>
+  );
+}
+
+// What each line is doing right now, in plain words: the order, the product, since when, and how far along.
+function NowRunning({ lines, logs, days, todayIso, onOpen }: { lines: DailyLine[]; logs: Record<string, DayLogView>; days: string[]; todayIso: string; onOpen: (lineId: number, date: string) => void }) {
+  const inMonth = days.includes(todayIso);
+  return (
+    <section>
+      <div className="mb-2 flex items-baseline justify-between">
+        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-700">Now running</div>
+        <div className="text-[11px] text-stone-500">{new Date(`${todayIso}T00:00:00`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" })}</div>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {lines.map((l) => {
+          // The open (locked, not closed) day if there is one, else today's log, else the next planned day.
+          const openDay = days.find((d) => logs[`${l.id}|${d}`] && !logs[`${l.id}|${d}`].closed && !logs[`${l.id}|${d}`].stopped);
+          const date = openDay ?? (inMonth ? todayIso : days[0]);
+          const log = logs[`${l.id}|${date}`];
+          const slot = log ? l.slots.find((s) => s.allocationId === log.allocationId) : l.slots.find((s) => s.made < s.planned - 0.05);
+          const state = log?.stopped ? "stopped" : log && !log.closed ? "running" : log?.closed ? "closed" : "idle";
+          const left = slot ? Math.max(0, Math.round((slot.planned - slot.made) * 10) / 10) : 0;
+          const daysLeft = slot && l.dayCapacity ? Math.ceil(left / l.dayCapacity) : 0;
+          const tone = state === "running" ? "border-brand-600" : state === "stopped" ? "border-red-600" : state === "closed" ? "border-emerald-600" : "border-stone-300";
+          return (
+            <button key={l.id} type="button" onClick={() => onOpen(l.id, date)} className={cx("border border-stone-300 border-l-[3px] bg-white p-3 text-left hover:bg-stone-50", tone)}>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-[15px] font-semibold text-stone-900">{l.code}</span>
+                <span className={cx("font-mono text-[10px] uppercase tracking-[0.12em]", state === "running" ? "text-brand-600" : state === "stopped" ? "text-red-700" : state === "closed" ? "text-emerald-700" : "text-stone-400")}>
+                  {state === "running" ? `Running since ${time(log!.lockedAt)}` : state === "stopped" ? "Not running" : state === "closed" ? `Closed · made ${t(log!.madeT ?? 0)}` : "Not started"}
+                </span>
+              </div>
+              {state === "stopped" ? (
+                <div className="mt-1 text-[13px] text-stone-700">{log?.events.at(-1)?.reason.replace(/^Not running: /, "")}</div>
+              ) : slot ? (
+                <>
+                  <div className="mt-1 truncate text-[13px] font-medium text-stone-900" title={slot.product}>
+                    {slot.customer} <span className="font-normal text-stone-500">· {slot.ref}</span>
+                  </div>
+                  <div className="truncate text-[12px] text-stone-600">{slot.product}</div>
+                  <div className="mt-2 flex items-baseline justify-between text-[12px] text-stone-600">
+                    <span>
+                      Today <b className="text-stone-900">{t(log && !log.closed ? log.capacityT : l.dayCapacity)}</b>
+                    </span>
+                    <span>
+                      Order <b className="text-stone-900">{t(slot.made)}</b> of {t(slot.planned)}
+                      {left > 0.05 && ` · ${daysLeft} day${daysLeft === 1 ? "" : "s"} left`}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1 bg-stone-200">
+                    <div className="h-full bg-emerald-600" style={{ width: `${Math.min(100, (slot.made / (slot.planned || 1)) * 100)}%` }} />
+                  </div>
+                </>
+              ) : (
+                <div className="mt-1 text-[13px] text-stone-500">Idle, no order planned</div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -431,7 +495,21 @@ function DayDrawer({ line, date, log, canEdit, onClose }: { line: DailyLine; dat
                   </tr>
                   <tr>
                     <td className={cx(tbl.td, "text-stone-500")}>Running</td>
-                    <td className={tbl.td}>{running?.customer ?? "No order"}</td>
+                    <td className={tbl.td}>
+                      {running ? (
+                        <>
+                          <div className="font-medium text-stone-900">
+                            {running.customer} <span className="font-normal text-stone-500">· {running.ref}</span>
+                          </div>
+                          <div className="text-[12px] text-stone-600">{running.product}</div>
+                          <div className="text-[12px] text-stone-600">
+                            Order {t(running.made)} of {t(running.planned)} made
+                          </div>
+                        </>
+                      ) : (
+                        "No order"
+                      )}
+                    </td>
                   </tr>
                   <tr>
                     <td className={cx(tbl.td, "text-stone-500")}>Planned</td>

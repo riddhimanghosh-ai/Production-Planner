@@ -9,10 +9,10 @@ export function cx(...c: (string | false | null | undefined)[]) {
 // Doctrine headline: mono eyebrow, display sans title with one italic serif accent word.
 export function PageHeader({ title, emph, eyebrow, subtitle, actions }: { title: string; emph?: string; eyebrow?: string; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b border-stone-300 pb-4">
-      <div>
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-stone-300 pb-3 md:mb-6 md:pb-4">
+      <div className="min-w-0">
         {eyebrow && <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-stone-500">{eyebrow}</div>}
-        <h1 className="text-[26px] font-medium leading-tight tracking-[-0.02em] text-stone-900">
+        <h1 className="text-[22px] font-medium leading-tight tracking-[-0.02em] text-stone-900 md:text-[26px]">
           {title}
           {emph && (
             <>
@@ -117,12 +117,15 @@ export function buttonClass(variant: "primary" | "secondary" | "danger" = "prima
 
 export function Tabs({ tabs, active }: { tabs: { href: string; label: string; key: string; count?: number }[]; active: string }) {
   return (
-    <div className="mb-4 flex gap-5 overflow-x-auto border-b border-stone-300">
+    <div className="-mx-4 mb-4 flex gap-5 overflow-x-auto border-b border-stone-300 px-4 md:mx-0 md:px-0">
       {tabs.map((t) => (
         <Link
           key={t.key}
           href={t.href}
-          className={cx("-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 py-2 text-[14px] font-semibold transition-colors", t.key === active ? "border-brand-600 text-stone-900" : "border-transparent text-stone-500 hover:text-stone-900")}
+          className={cx(
+            "-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 py-2 text-[14px] font-semibold transition-colors",
+            t.key === active ? "border-brand-600 text-stone-900" : "border-transparent text-stone-500 hover:text-stone-900",
+          )}
         >
           {t.label}
           {!!t.count && <span className="font-mono text-[11px] text-stone-500">{t.count}</span>}

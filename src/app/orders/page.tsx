@@ -157,54 +157,94 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
       {rows.length === 0 ? (
         <Empty>No orders here.</Empty>
       ) : (
-        <div className={tbl.wrap}>
-          <table className={tbl.table}>
-            <thead>
-              <tr>
-                <th className={tbl.th}>Order</th>
-                <th className={tbl.th}>Customer</th>
-                <th className={tbl.th}>Salesperson</th>
-                <th className={tbl.th}>Product</th>
-                <th className={tbl.thR}>Tonnes</th>
-                <th className={tbl.th}>Ship month</th>
-                <th className={tbl.thR}>Value</th>
-                <th className={tbl.thR}>Profit</th>
-                <th className={tbl.th}>Approvals</th>
-                <th className={tbl.th}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.slice((page - 1) * PAGE, page * PAGE).map((v) => {
-                const first = v.lines[0];
-                return (
-                  <tr key={v.order.id} className={tbl.tr}>
-                    <td className={cx(tbl.td, "whitespace-nowrap")}>
-                      <Link href={`/orders/${v.order.id}`} className="font-medium text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-brand-600">
-                        {v.order.ref}
-                      </Link>
-                      {v.order.priority === "HIGH" && <span className="ml-1 text-[11px] font-semibold text-red-700">HIGH</span>}
-                    </td>
-                    <td className={cx(tbl.td, "font-medium text-stone-900")}>{v.customer.name}</td>
-                    <td className={cx(tbl.td, "text-stone-600")}>{v.owner?.name}</td>
-                    <td className={tbl.td}>{first ? productLabel(first.sku, first.chicoryPct) : "–"}</td>
-                    <td className={tbl.tdR}>{v.totalMt.toLocaleString("en-IN")}</td>
-                    <td className={cx(tbl.td, "whitespace-nowrap")}>{monthLabel(v.order.shipments?.[0]?.month ?? v.firstMonth)}</td>
-                    <td className={tbl.tdR}>{v.commercials ? formatInr(v.margin.revenue) : <span className="text-stone-400">hidden</span>}</td>
-                    <td className={cx(tbl.tdR, "font-semibold", v.commercials && (v.margin.marginPct >= v.margin.targetPct ? "text-emerald-700" : "text-red-700"))}>{v.commercials ? `${v.margin.marginPct.toFixed(1)}%` : "–"}</td>
-                    <td className={tbl.td}>
-                      <ApprovalTags v={v} />
-                    </td>
-                    <td className={cx(tbl.td, "whitespace-nowrap")}>
-                      <StatusBadge status={v.order.status} />
-                      <div className="mt-0.5 text-[11px] text-stone-500">{nextStep(v)}</div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <Pager page={page} pages={pages} total={rows.length} href={pageHref} />
-        </div>
+        <>
+          <div className="space-y-2 md:hidden">
+            {rows.slice((page - 1) * PAGE, page * PAGE).map((v) => {
+              const first = v.lines[0];
+              return (
+                <Link key={v.order.id} href={`/orders/${v.order.id}`} className="block border border-stone-300 bg-white p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-[15px] font-semibold text-stone-900">{v.customer.name}</div>
+                      <div className="font-mono text-[11px] text-stone-500">
+                        {v.order.ref} · {v.owner?.name}
+                      </div>
+                    </div>
+                    <StatusBadge status={v.order.status} />
+                  </div>
+                  <div className="mt-2 text-[13px] text-stone-700">{first ? productLabel(first.sku, first.chicoryPct) : "–"}</div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 border-t border-stone-200 pt-2 text-[12px]">
+                    <div>
+                      <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-stone-500">Tonnes</div>
+                      <div className="font-semibold text-stone-900">{v.totalMt.toLocaleString("en-IN")} t</div>
+                    </div>
+                    <div>
+                      <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-stone-500">Ships</div>
+                      <div className="font-semibold text-stone-900">{monthLabel(v.order.shipments?.[0]?.month ?? v.firstMonth)}</div>
+                    </div>
+                    <div>
+                      <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-stone-500">Margin</div>
+                      <div className={cx("font-semibold", v.commercials ? (v.margin.marginPct >= v.margin.targetPct ? "text-emerald-700" : "text-red-700") : "text-stone-400")}>{v.commercials ? `${v.margin.marginPct.toFixed(1)}%` : "–"}</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-stone-500">
+                    <ApprovalTags v={v} />
+                    <span>{nextStep(v)}</span>
+                  </div>
+                </Link>
+              );
+            })}
+            <Pager page={page} pages={pages} total={rows.length} href={pageHref} />
+          </div>
+          <div className={cx(tbl.wrap, "hidden md:block")}>
+            <table className={tbl.table}>
+              <thead>
+                <tr>
+                  <th className={tbl.th}>Order</th>
+                  <th className={tbl.th}>Customer</th>
+                  <th className={tbl.th}>Salesperson</th>
+                  <th className={tbl.th}>Product</th>
+                  <th className={tbl.thR}>Tonnes</th>
+                  <th className={tbl.th}>Ship month</th>
+                  <th className={tbl.thR}>Value</th>
+                  <th className={tbl.thR}>Profit</th>
+                  <th className={tbl.th}>Approvals</th>
+                  <th className={tbl.th}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.slice((page - 1) * PAGE, page * PAGE).map((v) => {
+                  const first = v.lines[0];
+                  return (
+                    <tr key={v.order.id} className={tbl.tr}>
+                      <td className={cx(tbl.td, "whitespace-nowrap")}>
+                        <Link href={`/orders/${v.order.id}`} className="font-medium text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-brand-600">
+                          {v.order.ref}
+                        </Link>
+                        {v.order.priority === "HIGH" && <span className="ml-1 text-[11px] font-semibold text-red-700">HIGH</span>}
+                      </td>
+                      <td className={cx(tbl.td, "font-medium text-stone-900")}>{v.customer.name}</td>
+                      <td className={cx(tbl.td, "text-stone-600")}>{v.owner?.name}</td>
+                      <td className={tbl.td}>{first ? productLabel(first.sku, first.chicoryPct) : "–"}</td>
+                      <td className={tbl.tdR}>{v.totalMt.toLocaleString("en-IN")}</td>
+                      <td className={cx(tbl.td, "whitespace-nowrap")}>{monthLabel(v.order.shipments?.[0]?.month ?? v.firstMonth)}</td>
+                      <td className={tbl.tdR}>{v.commercials ? formatInr(v.margin.revenue) : <span className="text-stone-400">hidden</span>}</td>
+                      <td className={cx(tbl.tdR, "font-semibold", v.commercials && (v.margin.marginPct >= v.margin.targetPct ? "text-emerald-700" : "text-red-700"))}>{v.commercials ? `${v.margin.marginPct.toFixed(1)}%` : "–"}</td>
+                      <td className={tbl.td}>
+                        <ApprovalTags v={v} />
+                      </td>
+                      <td className={cx(tbl.td, "whitespace-nowrap")}>
+                        <StatusBadge status={v.order.status} />
+                        <div className="mt-0.5 text-[11px] text-stone-500">{nextStep(v)}</div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <Pager page={page} pages={pages} total={rows.length} href={pageHref} />
+          </div>
+        </>
       )}
     </>
   );
@@ -219,7 +259,48 @@ function Approvals({ queue, mineCount, viewer }: { queue: ReturnType<typeof appr
   return (
     <>
       {intro && <p className="mb-2 text-xs text-stone-600">{intro}</p>}
-      <div className={tbl.wrap}>
+      <div className="space-y-2 md:hidden">
+        {queue.map((q) => {
+          const first = q.lines[0];
+          const signable = q.approvals.filter((a) => a.status === "PENDING" && (role === "ALL" || a.role === role)).map((a) => a.role);
+          const profitOk = q.margin.marginPct >= q.margin.targetPct;
+          const f = orderFeasibility(q.order.id, shorts);
+          return (
+            <div key={q.order.id} className="border border-stone-300 bg-white p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <Link href={`/orders/${q.order.id}`} className="block truncate text-[15px] font-semibold text-stone-900">
+                    {q.customer.name}
+                  </Link>
+                  <div className="text-[12px] text-stone-600">
+                    {first ? productLabel(first.sku, first.chicoryPct) : ""} · {monthLabel(q.firstMonth)}
+                  </div>
+                </div>
+                <div className="text-right text-[12px]">
+                  <div className="font-semibold text-stone-900">{q.totalMt.toLocaleString("en-IN")} t</div>
+                  <div className={cx("font-semibold", profitOk ? "text-emerald-700" : "text-red-700")}>{q.margin.marginPct.toFixed(1)}%</div>
+                </div>
+              </div>
+              <div className="mt-2 border-t border-stone-200 pt-2">{f && <FeasibilityCell f={f} beanFixed={q.order.gbPriceClosed} orderId={q.order.id} />}</div>
+              <div className="mt-2 flex items-center gap-3 border-t border-stone-200 pt-2 text-[12px]">
+                <span>
+                  CFO <Decision status={q.approvals.find((a) => a.role === "CFO")?.status} />
+                </span>
+                <span>
+                  COO <Decision status={q.approvals.find((a) => a.role === "COO")?.status} />
+                </span>
+                <span className={cx("ml-auto", q.daysPending >= 3 && "font-semibold text-red-700")}>waiting {q.daysPending}d</span>
+              </div>
+              {signable.length > 0 && (
+                <div className="mt-2 border-t border-stone-200 pt-2">
+                  <QuickDecision key={signable.join()} orderId={q.order.id} roles={signable} allAccess={role === "ALL"} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className={cx(tbl.wrap, "hidden md:block")}>
         <table className={cx(tbl.table, "min-w-[980px]")}>
           <thead>
             <tr>

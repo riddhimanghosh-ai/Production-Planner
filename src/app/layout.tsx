@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter_Tight, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
+import { MobileNav } from "@/components/mobile-nav";
 import { Nav, ResetDemoButton, ViewerSwitcher } from "@/components/shell";
 import { can } from "@/lib/domain";
 import { shortages } from "@/lib/inventory";
@@ -27,26 +28,27 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${display.variable} ${serif.variable} ${mono.variable} h-full antialiased`}>
       <body className="min-h-full font-sans md:flex">
-        <aside className="border-b border-stone-300 bg-white px-4 py-4 md:sticky md:top-0 md:flex md:h-screen md:w-60 md:shrink-0 md:flex-col md:border-b-0 md:border-r">
-          <div className="mb-3 flex items-center justify-between gap-4 md:mb-4 md:block">
+        <aside className="sticky top-0 z-20 border-b border-stone-300 bg-white px-4 py-3 md:static md:sticky md:top-0 md:flex md:h-screen md:w-60 md:shrink-0 md:flex-col md:border-b-0 md:border-r md:py-4">
+          <div className="flex items-center justify-between gap-4 md:mb-4 md:block">
             <div>
               <div className="text-[15px] font-medium tracking-tight text-stone-900">
                 SLN <em className="font-serif font-normal text-brand-600">Coffee</em>
               </div>
               <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-stone-500">Order & capacity</div>
             </div>
-            <div className="w-48 md:hidden">{switcher}</div>
+            <div className="w-44 md:hidden">{switcher}</div>
           </div>
-          <Nav approvalCount={approvalCount} alertCount={alertCount} canCreate={can(viewer.role, ["BD_EXEC", "BD_HEAD"])} />
+          <div className="hidden md:block">
+            <Nav approvalCount={approvalCount} alertCount={alertCount} canCreate={can(viewer.role, ["BD_EXEC", "BD_HEAD"])} />
+          </div>
           <div className="mt-auto hidden md:block">
             {switcher}
-            <p className="mt-2 text-[11px] leading-snug text-stone-500">
-              Prototype data, resets on restart.
-            </p>
+            <p className="mt-2 text-[11px] leading-snug text-stone-500">Prototype data, resets on restart.</p>
             <ResetDemoButton />
           </div>
         </aside>
-        <main className="min-w-0 flex-1 px-4 py-6 md:px-8">{children}</main>
+        <main className="min-w-0 flex-1 px-4 pb-24 pt-4 md:px-8 md:py-6">{children}</main>
+        <MobileNav approvalCount={approvalCount} alertCount={alertCount} />
       </body>
     </html>
   );

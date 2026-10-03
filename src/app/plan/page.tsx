@@ -6,7 +6,7 @@ import { PlanSuggestions } from "@/components/plan-suggestions";
 import { PageHeader } from "@/components/ui";
 import { store } from "@/data/store";
 import { capacityAt, changeoverAt, freeAt, loadAt, loadCapacityState, noteAt, planHorizon, reservedAt } from "@/lib/capacity";
-import { can, productLabel } from "@/lib/domain";
+import { can, productLabel, todayIso } from "@/lib/domain";
 import { inventoryProjection } from "@/lib/inventory";
 import { requirementsFor } from "@/lib/procurement";
 import { getViewer } from "@/lib/role";
@@ -103,7 +103,7 @@ export default async function PlanPage({ searchParams }: PageProps<"/plan">) {
 
   return (
     <>
-      <PageHeader eyebrow="02 / Production" title="Production" emph="calendar" subtitle="Three lines, month by month. Click a box to see its orders." />
+      <PageHeader eyebrow="02 / Production" title="Production" emph="calendar" subtitle="Four lines, month by month. Click a box to see its orders." />
       <PlanningTabs active={active} toPlace={toPlace} />
       {active === "new" && (
         <PlanSuggestions
@@ -197,6 +197,8 @@ function Daily({ months, monthParam, canEdit }: { months: string[]; monthParam?:
           const sku = st.skus.find((x) => x.id === ol.skuId)!;
           return {
             allocationId: a.id,
+            orderId: a.orderId,
+            ref: st.orders.find((o) => o.id === a.orderId)?.ref ?? "",
             customer: st.customers.find((c) => c.id === st.orders.find((o) => o.id === a.orderId)?.customerId)?.name ?? "",
             product: productLabel(sku, ol.chicoryPct),
             productType: sku.productType,
@@ -227,5 +229,5 @@ function Daily({ months, monthParam, canEdit }: { months: string[]; monthParam?:
       .filter((k) => k.startsWith("changeover."))
       .map((k) => [k.replace("changeover.", ""), set[k]]),
   );
-  return <DailyBoard month={month} months={shown} days={days} lines={lines} logs={logs} canEdit={canEdit} changeoverHours={changeoverHours} />;
+  return <DailyBoard month={month} months={shown} days={days} lines={lines} logs={logs} canEdit={canEdit} changeoverHours={changeoverHours} todayIso={todayIso()} />;
 }
