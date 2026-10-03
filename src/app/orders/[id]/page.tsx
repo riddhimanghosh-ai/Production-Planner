@@ -323,7 +323,7 @@ function CooCheck({ feas }: { feas: Feasibility }) {
                   <th className={tbl.th}>Line ({monthLabel(m.month)})</th>
                   <th className={tbl.thR}>Free for {feas.product}</th>
                   <th className={tbl.thR}>Free on the whole line</th>
-                  <th className={tbl.thR}>Planned here</th>
+                  <th className={tbl.thR}>Suggested here</th>
                 </tr>
               </thead>
               <tbody>
