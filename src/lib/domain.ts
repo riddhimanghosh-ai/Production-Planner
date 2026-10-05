@@ -67,7 +67,7 @@ export const FREIGHT_BASIS = { SELLER: "We deliver (freight in our price)", BUYE
 export const BEAN_GRADES: Record<Origin, string[]> = {
   INDIA: ["Robusta Cherry AA", "Robusta Parchment AB", "Arabica Plantation A", "Arabica Cherry AB"],
   VIETNAM: ["Robusta Screen 16", "Robusta Screen 18"],
-  BRAZIL: ["Arabica Santos 17/18", "Conilon Robusta 13"],
+  BRAZIL: ["Conilon Robusta 13", "Arabica Santos 17/18"],
 };
 export const GB_GRADES = [...new Set(Object.values(BEAN_GRADES).flat())];
 export const gradeKey = (grade: string) =>
