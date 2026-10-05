@@ -218,7 +218,7 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
                   <th className={tbl.th}>Customer</th>
                   <th className={tbl.th}>Salesperson</th>
                   <th className={tbl.th}>Product</th>
-                  <th className={tbl.th}>Green beans</th>
+                  <th className={tbl.th}>Bean origin · grade</th>
                   <th className={tbl.thR}>Tonnes</th>
                   <th className={tbl.th}>Ship month</th>
                   <th className={tbl.thR}>Value</th>

@@ -74,7 +74,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
           <thead>
             <tr>
               <th className={tbl.th}>Product</th>
-              <th className={tbl.th}>Green beans</th>
+              <th className={tbl.th}>Bean origin · grade</th>
               <th className={tbl.th}>Ship month</th>
               <th className={tbl.thR}>Tonnes</th>
               <th className={tbl.thR}>Value</th>
