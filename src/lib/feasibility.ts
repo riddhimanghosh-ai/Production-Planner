@@ -1,12 +1,13 @@
 import { store } from "@/data/store";
 import { beanPrice, monthLabel, monthStartDate, ORIGINS, PRODUCT_TYPES, shipmentTonnes, type Origin, type ProductType } from "./domain";
-import { shortages, type Shortage } from "./inventory";
+import { inventoryProjection, shortages, type Shortage } from "./inventory";
 import type { Order, OrderLine } from "@/data/types";
 import { freeAt, loadCapacityState } from "./capacity";
 import type { MarginResult } from "./margin";
 import { lineMarginFor } from "./order-margin";
 import { loadSettings } from "./settings";
-import { planAvailability } from "./workflow";
+import { planAvailability, withShare } from "./workflow";
+import { requirementsFor } from "./procurement";
 
 // The COO's question: can we make this order on time?
 // 1. Line space: in each ship month, is there room on lines that make this product (ignoring this order's own booking)?
@@ -17,6 +18,8 @@ export type Feasibility = {
   product: string;
   line: { ok: boolean; short: { month: string; short: number }[] };
   materials: { name: string; unit: string; month: string; short: number; orderBy: Date; earliest: string; canArrive: boolean; late: boolean; leadDays: number }[];
+  // Every material this order needs, month by month: what it needs, what is there, the lead time, and whether it is covered.
+  stock: StockRow[];
   // Detail for the COO check tab.
   // Green bean cost: the price the order was costed on vs today's market, and what that does to the margin.
   bean: {
@@ -39,6 +42,8 @@ export type Feasibility = {
   perMonth: { month: string; need: number; lines: { code: string; free: number; freeTotal: number; take: number }[]; short: number; fitsWithMix: boolean }[];
   suggestion: string | null;
 };
+
+export type StockRow = { key: string; name: string; unit: string; month: string; need: number; onHand: number; onOrder: number; monthShort: number; leadDays: number; orderBy: Date; earliest: string; status: "ok" | "buy" | "late" | "blocked" };
 
 export function orderFeasibility(orderId: number, shorts: Shortage[] = shortages(), today = new Date()): Feasibility | null {
   const st = store();
@@ -67,6 +72,49 @@ export function orderFeasibility(orderId: number, shorts: Shortage[] = shortages
       return { name: x.name.replace("Green beans · ", "Beans · "), unit: x.unit, month: x.month, short: x.short, orderBy, earliest: x.earliestArrival, canArrive, late: canArrive && orderBy < today, leadDays: x.leadDays };
     });
 
+  // The full stock picture, covered materials included, so the COO sees lead times for everything the order uses.
+  const s = loadSettings();
+  const projection = inventoryProjection();
+  const allocs = st.allocations.filter((a) => a.orderId === orderId);
+  const slots = allocs.length ? allocs.map((a) => ({ month: a.month, quantityMt: a.quantityMt, orderLineId: a.orderLineId })) : lines.map((l) => ({ month: l.month, quantityMt: l.quantityMt, orderLineId: l.id }));
+  const byKey = new Map<string, StockRow>();
+  for (const slot of slots) {
+    const ol = lines.find((l) => l.id === slot.orderLineId) ?? lines[0];
+    const lineSku = withShare(
+      st.skus.find((x) => x.id === ol.skuId)!,
+      ol.chicoryPct,
+    );
+    for (const d of requirementsFor(lineSku, order, slot, s)) {
+      const row = projection.find((r) => r.key === d.key);
+      const cell = row?.cells[slot.month];
+      const k = `${d.key}|${slot.month}`;
+      const e = byKey.get(k);
+      if (e) {
+        e.need += d.quantity;
+        continue;
+      }
+      const leadDays = row?.leadDays ?? 0;
+      const orderBy = new Date(monthStartDate(slot.month).getTime() - leadDays * 86400000);
+      const monthShort = cell?.short ?? 0;
+      const canArrive = (row?.earliestArrival ?? slot.month) <= slot.month;
+      byKey.set(k, {
+        key: d.key,
+        name: d.material,
+        unit: d.unit,
+        month: slot.month,
+        need: d.quantity,
+        onHand: row?.onHand ?? 0,
+        onOrder: row?.onOrder ?? 0,
+        monthShort,
+        leadDays,
+        orderBy,
+        earliest: row?.earliestArrival ?? slot.month,
+        status: monthShort > 0.5 ? (!canArrive ? "blocked" : orderBy < today ? "late" : "buy") : "ok",
+      });
+    }
+  }
+  const stock = [...byKey.values()].sort((a, b) => a.month.localeCompare(b.month) || a.name.localeCompare(b.name));
+
   const blocked = materials.filter((m) => !m.canArrive);
   const verdict: Feasibility["verdict"] = lineShort.length || blocked.length ? "no" : materials.length ? "buy" : "ok";
   const firstBuy = [...materials].sort((a, b) => a.orderBy.getTime() - b.orderBy.getTime())[0];
@@ -80,7 +128,7 @@ export function orderFeasibility(orderId: number, shorts: Shortage[] = shortages
         : lineShort.length
           ? `Not feasible: no line space in ${lineShort.map((m) => monthLabel(m.month)).join(", ")}`
           : `Not feasible: ${blocked[0].name} can't arrive before ${monthLabel(blocked[0].earliest)}`;
-  return { verdict, headline, product: PRODUCT_TYPES[sku.productType as ProductType] ?? sku.productType, line: { ok: !lineShort.length, short: lineShort }, materials, perMonth, suggestion: avail.suggestion, bean: beanCheck(order, lines) };
+  return { verdict, headline, product: PRODUCT_TYPES[sku.productType as ProductType] ?? sku.productType, line: { ok: !lineShort.length, short: lineShort }, materials, stock, perMonth, suggestion: avail.suggestion, bean: beanCheck(order, lines) };
 }
 
 function beanCheck(order: Order, lines: OrderLine[]): Feasibility["bean"] {

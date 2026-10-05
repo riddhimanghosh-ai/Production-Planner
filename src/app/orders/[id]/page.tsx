@@ -43,7 +43,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
     { key: "plan", label: "Production plan" },
     { key: "coo", label: "COO check" },
     { key: "details", label: "Details" },
-    ...(commercials && lines[0]?.margin ? [{ key: "costs", label: "Costs" }] : []),
+    ...(commercials && lines[0]?.margin ? [{ key: "costs", label: "CFO check" }] : []),
     { key: "history", label: "History" },
   ];
 
@@ -134,32 +134,20 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
               <tr>
                 <td className={cx(tbl.td, "bg-stone-50 text-stone-500")}>Materials</td>
                 <td className={tbl.td}>
-                  {feas.materials.length === 0 ? (
-                    <span className="text-emerald-700">Covered by stock and purchases on the way</span>
-                  ) : (
-                    feas.materials.map((m) => (
-                      <div key={`${m.name}-${m.month}`} className={m.canArrive ? "text-stone-900" : "text-red-700"}>
-                        {m.name}: {m.short.toLocaleString("en-IN", { maximumFractionDigits: 1 })} {m.unit === "kg" ? "kg" : m.unit} short in {monthLabel(m.month)},{" "}
-                        {m.canArrive ? `order by ${m.late ? "now" : m.orderBy.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : `can't arrive before ${monthLabel(m.earliest)}`}
-                      </div>
-                    ))
-                  )}
+                  {feas.stock.length === 0 && <span className="text-emerald-700">Nothing needed yet</span>}
+                  {feas.stock.map((m) => (
+                    <div key={`${m.key}-${m.month}`} className={m.status === "ok" ? "text-stone-700" : m.status === "blocked" ? "text-red-700" : "text-stone-900"}>
+                      <span className={cx("mr-1 font-semibold", m.status === "ok" ? "text-emerald-700" : m.status === "blocked" ? "text-red-700" : "text-stone-900")}>{m.status === "ok" ? "✓" : m.status === "blocked" ? "✕" : "•"}</span>
+                      {m.name}: {qty(m.need, m.unit)} needed in {monthLabel(m.month)}
+                      {m.status === "ok"
+                        ? ", covered by stock and purchases"
+                        : m.status === "blocked"
+                          ? `, ${qty(m.monthShort, m.unit)} short and a ${m.leadDays}-day lead time means it can't arrive before ${monthLabel(m.earliest)}`
+                          : `, ${qty(m.monthShort, m.unit)} short, ${m.leadDays}-day lead time, order by ${m.status === "late" ? "now" : m.orderBy.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`}
+                    </div>
+                  ))}
                 </td>
               </tr>
-              {feas.bean && (
-                <tr>
-                  <td className={cx(tbl.td, "bg-stone-50 text-stone-500")}>Input costs</td>
-                  <td className={cx(tbl.td, feas.bean.risk === "high" ? "text-red-700" : "text-stone-900")}>
-                    {ORIGINS[feas.bean.origin as Origin] ?? feas.bean.origin} {feas.bean.grade} beans {feas.bean.fixed ? `fixed at ₹${feas.bean.pricedAt}/kg` : `not fixed, market ₹${feas.bean.marketNow}/kg`} ({feas.bean.shareOfCost.toFixed(0)}% of
-                    cost)
-                    {feas.bean.costs
-                      .filter((c) => c.then != null && Math.abs(c.now - c.then) >= 0.5)
-                      .map((c) => ` · ${c.label} ${c.now > (c.then ?? 0) ? "up" : "down"} ₹${Math.round(Math.abs(c.now - (c.then ?? 0)))}/kg`)
-                      .join("")}{" "}
-                    · margin at today&apos;s costs {feas.bean.marginToday.toFixed(1)}%
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
@@ -294,34 +282,36 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
       )}
 
       {tab === "costs" && commercials && lines[0]?.margin && (
-        <div className="max-w-lg overflow-x-auto rounded-md border border-stone-300 bg-white">
-          <table className="tabular w-full text-[13px]">
-            <thead>
-              <tr>
-                <th className={tbl.th}>Per kg{data.snapshot ? " (as priced)" : ""}</th>
-                <th className={tbl.thR}>₹</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className={tbl.td}>Selling price</td>
-                <td className={tbl.tdR}>{formatPerKg(lines[0].margin.priceInrPerKg)}</td>
-              </tr>
-              {lines[0].margin.lines.map((c) => (
-                <tr key={c.label}>
-                  <td className={cx(tbl.td, "text-stone-600")}>− {c.label}</td>
-                  <td className={tbl.tdR}>{formatPerKg(c.perKg)}</td>
+        <div className="space-y-5">
+          <div className="max-w-lg overflow-x-auto rounded-md border border-stone-300 bg-white">
+            <table className="tabular w-full text-[13px]">
+              <thead>
+                <tr>
+                  <th className={tbl.th}>Per kg{data.snapshot ? " (as priced)" : ""}</th>
+                  <th className={tbl.thR}>₹</th>
                 </tr>
-              ))}
-              <tr className="bg-stone-50 font-semibold">
-                <td className={tbl.td}>Profit per kg</td>
-                <td className={tbl.tdR}>{formatPerKg(lines[0].margin.marginPerKg)}</td>
-              </tr>
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className={tbl.td}>Selling price</td>
+                  <td className={tbl.tdR}>{formatPerKg(lines[0].margin.priceInrPerKg)}</td>
+                </tr>
+                {lines[0].margin.lines.map((c) => (
+                  <tr key={c.label}>
+                    <td className={cx(tbl.td, "text-stone-600")}>− {c.label}</td>
+                    <td className={tbl.tdR}>{formatPerKg(c.perKg)}</td>
+                  </tr>
+                ))}
+                <tr className="bg-stone-50 font-semibold">
+                  <td className={tbl.td}>Profit per kg</td>
+                  <td className={tbl.tdR}>{formatPerKg(lines[0].margin.marginPerKg)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {feas?.bean && <InputCosts feas={feas} />}
         </div>
       )}
-
       {tab === "history" && (
         <div className="overflow-x-auto rounded-md border border-stone-300 bg-white">
           <table className="w-full text-[13px]">
@@ -458,9 +448,67 @@ function CooCheck({ feas }: { feas: Feasibility }) {
         </section>
       )}
 
+      <section>
+        <div className={eyebrow}>{feas.line.ok ? 2 : 3} · Materials, stock and lead time</div>
+        <div className="overflow-x-auto border border-stone-300 bg-white">
+          <table className="tabular w-full min-w-[860px] text-[13px]">
+            <thead>
+              <tr>
+                <th className={tbl.th}>Material</th>
+                <th className={tbl.th}>Month</th>
+                <th className={tbl.thR}>This order needs</th>
+                <th className={tbl.thR}>In stock</th>
+                <th className={tbl.thR}>On the way</th>
+                <th className={tbl.thR}>Short that month</th>
+                <th className={tbl.thR}>Lead time</th>
+                <th className={tbl.th}>Order by</th>
+                <th className={tbl.th}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {feas.stock.length === 0 && (
+                <tr>
+                  <td colSpan={9} className={cx(tbl.td, "text-stone-500")}>
+                    No materials needed yet.
+                  </td>
+                </tr>
+              )}
+              {feas.stock.map((m) => (
+                <tr key={`${m.key}-${m.month}`} className={cx(tbl.tr, m.status === "blocked" && "bg-red-50/50")}>
+                  <td className={cx(tbl.td, "font-medium")}>{m.name}</td>
+                  <td className={cx(tbl.td, "whitespace-nowrap text-stone-600")}>{monthLabel(m.month)}</td>
+                  <td className={cx(tbl.tdR, "font-semibold")}>{qty(m.need, m.unit)}</td>
+                  <td className={tbl.tdR}>{qty(m.onHand, m.unit)}</td>
+                  <td className={cx(tbl.tdR, "text-stone-600")}>{m.onOrder > 0 ? qty(m.onOrder, m.unit) : "–"}</td>
+                  <td className={cx(tbl.tdR, m.monthShort > 0.5 ? "font-semibold text-red-700" : "text-stone-400")}>{m.monthShort > 0.5 ? qty(m.monthShort, m.unit) : "–"}</td>
+                  <td className={cx(tbl.tdR, "text-stone-600")}>{m.leadDays} days</td>
+                  <td className={cx(tbl.td, "whitespace-nowrap", m.status === "late" && "font-semibold text-red-700")}>
+                    {m.status === "ok" ? "–" : m.status === "late" ? "Now" : m.orderBy.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                  </td>
+                  <td className={cx(tbl.td, "whitespace-nowrap font-semibold", m.status === "ok" ? "text-emerald-700" : m.status === "blocked" ? "text-red-700" : "text-stone-900")}>
+                    {m.status === "ok" ? "Covered" : m.status === "buy" ? "Buy in time" : m.status === "late" ? "Buy now, tight" : `Too late, earliest ${monthLabel(m.earliest)}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-1 text-[12px] text-stone-500">
+          Short that month counts every order, not just this one, against stock and purchases on the way. Lead time is the supplier&apos;s time to deliver; Order by is the last day to place the purchase. Prices are the CFO&apos;s side, under CFO
+          check.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+// The CFO's view of input costs: every cost head when the order was priced vs today, and the green bean position.
+function InputCosts({ feas }: { feas: Feasibility }) {
+  return (
+    <div className="space-y-5">
       {feas.bean && (
         <section>
-          <div className={eyebrow}>{feas.line.ok ? "2" : "3"} · Input costs: green beans, chicory, making, packing, freight</div>
+          <div className={eyebrow}>Input costs: green beans, chicory, making, packing, freight</div>
           <div className="mb-3 overflow-x-auto border border-stone-300 bg-white">
             <table className="tabular w-full min-w-[640px] text-[13px]">
               <thead>
@@ -545,44 +593,8 @@ function CooCheck({ feas }: { feas: Feasibility }) {
           </div>
         </section>
       )}
-
-      <section>
-        <div className={eyebrow}>{(feas.line.ok ? 2 : 3) + (feas.bean ? 1 : 0)} · Materials, stock and lead time</div>
-        <div className="overflow-x-auto border border-stone-300 bg-white">
-          <table className="tabular w-full min-w-[720px] text-[13px]">
-            <thead>
-              <tr>
-                <th className={tbl.th}>Material</th>
-                <th className={tbl.th}>Short in</th>
-                <th className={tbl.thR}>Short by</th>
-                <th className={tbl.thR}>Lead time</th>
-                <th className={tbl.th}>Order by</th>
-                <th className={tbl.th}>Can it arrive in time?</th>
-              </tr>
-            </thead>
-            <tbody>
-              {feas.materials.length === 0 && (
-                <tr>
-                  <td colSpan={6} className={cx(tbl.td, "text-emerald-700")}>
-                    Every material is covered by stock and purchases on the way.
-                  </td>
-                </tr>
-              )}
-              {feas.materials.map((m) => (
-                <tr key={`${m.name}-${m.month}`} className={cx(tbl.tr, !m.canArrive && "bg-red-50/50")}>
-                  <td className={cx(tbl.td, "font-medium")}>{m.name}</td>
-                  <td className={tbl.td}>{monthLabel(m.month)}</td>
-                  <td className={cx(tbl.tdR, "font-semibold text-red-700")}>{m.unit === "kg" ? `${(m.short / 1000).toLocaleString("en-IN", { maximumFractionDigits: 1 })} t` : `${Math.round(m.short).toLocaleString("en-IN")} ${m.unit}`}</td>
-                  <td className={cx(tbl.tdR, "text-stone-600")}>{m.leadDays} days</td>
-                  <td className={cx(tbl.td, m.late && "font-semibold text-red-700")}>{m.late ? "Now" : m.orderBy.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</td>
-                  <td className={cx(tbl.td, "font-semibold", m.canArrive ? "text-emerald-700" : "text-red-700")}>{m.canArrive ? "Yes, if ordered by then" : `No, earliest ${monthLabel(m.earliest)}`}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-1 text-[12px] text-stone-500">Stock and purchases on the way are counted month by month; lead time is the supplier&apos;s time to deliver.</p>
-      </section>
     </div>
   );
 }
+
+const qty = (n: number, unit: string) => (unit === "kg" ? `${(n / 1000).toLocaleString("en-IN", { maximumFractionDigits: 1 })} t` : `${Math.round(n).toLocaleString("en-IN")} ${unit}`);

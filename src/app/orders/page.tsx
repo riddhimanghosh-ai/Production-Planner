@@ -300,7 +300,7 @@ function Approvals({ queue, mineCount, viewer }: { queue: ReturnType<typeof appr
                   <div className={cx("font-semibold", profitOk ? "text-emerald-700" : "text-red-700")}>{q.margin.marginPct.toFixed(1)}%</div>
                 </div>
               </div>
-              <div className="mt-2 border-t border-stone-200 pt-2">{f && <FeasibilityCell f={f} beanFixed={q.order.gbPriceClosed} orderId={q.order.id} />}</div>
+              <div className="mt-2 border-t border-stone-200 pt-2">{f && <FeasibilityCell f={f} orderId={q.order.id} />}</div>
               <div className="mt-2 flex items-center gap-3 border-t border-stone-200 pt-2 text-[12px]">
                 <span>
                   CFO <Decision status={q.approvals.find((a) => a.role === "CFO")?.status} />
@@ -327,7 +327,7 @@ function Approvals({ queue, mineCount, viewer }: { queue: ReturnType<typeof appr
               <th className={tbl.thR}>Tonnes</th>
               <th className={tbl.thR}>Value</th>
               <th className={tbl.thR}>Margin</th>
-              <th className={tbl.th}>COO check: capacity and input costs</th>
+              <th className={tbl.th}>COO check: line space and materials</th>
               <th className={tbl.th}>CFO</th>
               <th className={tbl.th}>COO</th>
               <th className={tbl.thR}>Waiting</th>
@@ -360,8 +360,10 @@ function Approvals({ queue, mineCount, viewer }: { queue: ReturnType<typeof appr
                   </td>
                   <td className={tbl.tdR}>{q.totalMt.toLocaleString("en-IN")}</td>
                   <td className={tbl.tdR}>{formatInr(q.margin.revenue)}</td>
-                  <td className={cx(tbl.tdR, "font-semibold", profitOk ? "text-emerald-700" : "text-red-700")}>{q.margin.marginPct.toFixed(1)}%</td>
-                  <td className={cx(tbl.td, "min-w-64")}>{f && <FeasibilityCell f={f} beanFixed={q.order.gbPriceClosed} orderId={q.order.id} />}</td>
+                  <td className={cx(tbl.tdR, "font-semibold", profitOk ? "text-emerald-700" : "text-red-700")}>
+                    {q.margin.marginPct.toFixed(1)}%<div className={cx("text-[11px] font-normal", q.order.gbPriceClosed ? "text-emerald-700" : "text-stone-500")}>{q.order.gbPriceClosed ? "beans fixed" : "beans at market"}</div>
+                  </td>
+                  <td className={cx(tbl.td, "min-w-64")}>{f && <FeasibilityCell f={f} orderId={q.order.id} />}</td>
                   <td className={tbl.td}>
                     <Decision status={q.approvals.find((a) => a.role === "CFO")?.status} />
                   </td>
@@ -381,7 +383,7 @@ function Approvals({ queue, mineCount, viewer }: { queue: ReturnType<typeof appr
 }
 
 // COO view of one order: verdict, then the two things checked in plain words.
-function FeasibilityCell({ f, beanFixed, orderId }: { f: Feasibility; beanFixed: boolean; orderId: number }) {
+function FeasibilityCell({ f, orderId }: { f: Feasibility; orderId: number }) {
   const date = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   const m = f.materials[0];
   return (
@@ -391,29 +393,20 @@ function FeasibilityCell({ f, beanFixed, orderId }: { f: Feasibility; beanFixed:
         Line: {f.line.ok ? <span className="text-emerald-700">room in the ship month</span> : <span className="text-red-700">short {f.line.short.map((x) => `${x.short} t in ${monthLabel(x.month)}`).join(", ")}</span>}
       </div>
       <div className="text-stone-600">
-        Stock:{" "}
+        Materials:{" "}
         {!m ? (
-          <span className="text-emerald-700">covered by stock and purchases on the way</span>
+          <span className="text-emerald-700">all {f.stock.length} covered by stock and purchases on the way</span>
         ) : !m.canArrive ? (
           <span className="text-red-700">
-            {m.name} can&apos;t arrive before {monthLabel(m.earliest)}
+            {m.name} can&apos;t arrive before {monthLabel(m.earliest)} ({m.leadDays}-day lead time)
           </span>
         ) : (
           <span>
             buy {m.name}
-            {f.materials.length > 1 ? ` + ${f.materials.length - 1} more` : ""} by {m.late ? "now" : date(m.orderBy)}
+            {f.materials.length > 1 ? ` + ${f.materials.length - 1} more` : ""} by {m.late ? "now" : date(m.orderBy)} ({m.leadDays}-day lead time)
           </span>
         )}
       </div>
-      {f.bean && (
-        <div className="text-stone-600">
-          Beans:{" "}
-          <span className={f.bean.risk === "high" ? "text-red-700" : f.bean.risk === "watch" ? "text-stone-900" : "text-emerald-700"}>
-            {f.bean.fixed ? `fixed ₹${f.bean.pricedAt}/kg` : `market ₹${f.bean.marketNow}/kg, not fixed`} · margin {f.bean.marginToday.toFixed(1)}%
-          </span>
-        </div>
-      )}
-      {!beanFixed && !f.bean && <div className="text-stone-500">Bean price not fixed yet</div>}
       <Link href={`/orders/${orderId}?tab=coo`} className="text-[11px] text-stone-500 underline underline-offset-2 hover:text-stone-900">
         Full check
       </Link>
