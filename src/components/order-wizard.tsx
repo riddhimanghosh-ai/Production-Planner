@@ -417,6 +417,7 @@ export function OrderWizard({
         pricePerKg: 1000,
         currency: "INR",
         beanOrigin: v.beanOrigin || "VIETNAM",
+        gbGrade: v.gbGrade || null,
         gbClosedPrice: v.gbPriceClosed ? v.gbClosedPrice : null,
         freightBasis: v.freightBasis,
         advancePct: v.advancePct,
@@ -436,7 +437,7 @@ export function OrderWizard({
       return inr > 0 ? ((inr - fixed - inr * creditShare) / inr) * 100 : null;
     };
     return { costNoCredit: fixed / fx, priceFor, marginAt };
-  }, [v.productType, v.blend, v.packFormat, v.chicoryPct, v.beanOrigin, v.gbPriceClosed, v.gbClosedPrice, v.freightBasis, v.advancePct, v.creditDays, v.currency, settings]);
+  }, [v.productType, v.blend, v.packFormat, v.chicoryPct, v.beanOrigin, v.gbGrade, v.gbPriceClosed, v.gbClosedPrice, v.freightBasis, v.advancePct, v.creditDays, v.currency, settings]);
 
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
@@ -724,6 +725,65 @@ export function OrderWizard({
           {step === 4 && (
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-5">
+                {/* Price generator: type the margin you want, get the price. Always shown; needs the product from step 1. */}
+                <div className="border border-stone-300 bg-white">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-300 bg-stone-50 px-3 py-1.5">
+                    <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-700">Price generator</span>
+                    <span className="text-[12px] text-stone-500">Enter the margin you want; the price follows</span>
+                  </div>
+                  {!pricing ? (
+                    <p className="p-3 text-[13px] text-stone-600">
+                      Pick the product, recipe and packing in{" "}
+                      <button type="button" onClick={() => setStep(0)} className="font-medium text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-brand-600">
+                        step 1
+                      </button>{" "}
+                      first; the generator needs them to work out the cost.
+                    </p>
+                  ) : (
+                    <div className="space-y-3 p-3">
+                      <div className="flex flex-wrap items-end gap-4">
+                        <label className="block">
+                          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-stone-500">Target margin</span>
+                          <div className="mt-1 flex items-center gap-1">
+                            <input type="number" min="0" max="80" step="0.5" value={wantPct} onChange={(e) => setWantPct(Number(e.target.value))} className="w-24 text-[20px] font-semibold" aria-label="Target margin %" />
+                            <span className="text-[16px] text-stone-500">%</span>
+                          </div>
+                        </label>
+                        <span className="pb-1 text-[22px] text-stone-400">→</span>
+                        <div>
+                          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-stone-500">Price per kg</span>
+                          <div className="tabular mt-1 text-[26px] font-medium leading-none tracking-[-0.02em] text-stone-900">{fmtPrice(pricing.priceFor(wantPct), v.currency)}</div>
+                        </div>
+                        <button type="button" disabled={pricing.priceFor(wantPct) == null} onClick={() => set("pricePerKg", pricing.priceFor(wantPct) ?? 0)} className={cx(buttonClass("primary"), "ml-auto")}>
+                          Use this price
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {[...new Set([minPct, minPct + 2, minPct + 4, minPct + 7, 25, 30])]
+                          .sort((a, b) => a - b)
+                          .map((pct) => (
+                            <button
+                              key={pct}
+                              type="button"
+                              onClick={() => setWantPct(pct)}
+                              className={cx("h-7 border px-2.5 text-[12px] font-medium", pct === wantPct ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 bg-white text-stone-700 hover:border-stone-900")}
+                            >
+                              {pct}%{pct === minPct ? " min" : ""}
+                            </button>
+                          ))}
+                      </div>
+                      <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-stone-200 pt-2 text-[12px] text-stone-500">
+                        <span>
+                          Break-even <b className="text-stone-700">{fmtPrice(pricing.priceFor(0), v.currency)}</b>
+                        </span>
+                        <span>
+                          CFO minimum {minPct}% <b className="text-stone-700">{fmtPrice(pricing.priceFor(minPct), v.currency)}</b>
+                        </span>
+                        <span>Cost uses the bean grade, recipe, packing, freight and payment terms you chose.</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <PriceHistory
                   customerName={customer?.name ?? (v.newCustomerName || "this customer")}
                   history={pastSales.filter((p) => p.customerId === v.customerId).sort((a, b) => b.date.localeCompare(a.date))}
@@ -734,47 +794,6 @@ export function OrderWizard({
                   minPct={minPct}
                   onUse={(price) => set("pricePerKg", price)}
                 />
-                {pricing && (
-                  <table className="w-full border border-stone-300 text-[13px]">
-                    <thead>
-                      <tr className="bg-stone-100 text-[11px] uppercase tracking-wide text-stone-600">
-                        <th className="px-2.5 py-1 text-left">Margin</th>
-                        <th className="px-2.5 py-1 text-right">Price / kg</th>
-                        <th className="px-2.5 py-1" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        { label: "Break-even", pct: 0 },
-                        { label: `CFO minimum`, pct: minPct },
-                      ].map((r) => (
-                        <tr key={r.label}>
-                          <td className="px-2.5 py-1 text-stone-600">
-                            {r.label} <span className="text-stone-400">({r.pct}%)</span>
-                          </td>
-                          <td className="px-2.5 py-1 text-right">{fmtPrice(pricing.priceFor(r.pct), v.currency)}</td>
-                          <td className="px-2.5 py-1 text-right">
-                            <button type="button" onClick={() => set("pricePerKg", pricing.priceFor(r.pct) ?? 0)} className="text-xs font-medium text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-brand-600">
-                              Use
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                      <tr className="bg-brand-50 font-semibold">
-                        <td className="px-2.5 py-1">
-                          Suggested at{" "}
-                          <input type="number" min="0" max="80" value={wantPct} onChange={(e) => setWantPct(Number(e.target.value))} className="w-14 rounded-sm border border-stone-300 bg-white px-1 py-0 text-right" aria-label="Target margin %" />%
-                        </td>
-                        <td className="px-2.5 py-1 text-right">{fmtPrice(pricing.priceFor(wantPct), v.currency)}</td>
-                        <td className="px-2.5 py-1 text-right">
-                          <button type="button" onClick={() => set("pricePerKg", pricing.priceFor(wantPct) ?? 0)} className={buttonClass("primary", "sm")}>
-                            Use
-                          </button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                )}
                 <label className="block text-sm">
                   <span className="text-xs font-semibold uppercase tracking-wide text-stone-700">
                     Selling price per kg
