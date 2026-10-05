@@ -63,7 +63,26 @@ export type Origin = keyof typeof ORIGINS;
 export const PAYMENT_MODES = ["Advance", "LC at sight", "LC usance", "CAD", "Open account"];
 export const CURRENCIES = ["INR", "USD"] as const;
 export const FREIGHT_BASIS = { SELLER: "We deliver (freight in our price)", BUYER: "Customer collects (they pay freight)" } as const;
-export const GB_GRADES = ["Robusta Cherry AA", "Robusta Parchment AB", "Robusta Screen 16", "Arabica Plantation A", "Arabica Cherry AB"];
+// Green bean grades each origin supplies. Price is set per origin and grade in settings.
+export const BEAN_GRADES: Record<Origin, string[]> = {
+  INDIA: ["Robusta Cherry AA", "Robusta Parchment AB", "Arabica Plantation A", "Arabica Cherry AB"],
+  VIETNAM: ["Robusta Screen 16", "Robusta Screen 18"],
+  BRAZIL: ["Arabica Santos 17/18", "Conilon Robusta 13"],
+};
+export const GB_GRADES = [...new Set(Object.values(BEAN_GRADES).flat())];
+export const gradeKey = (grade: string) =>
+  grade
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+export const beanPriceKey = (origin: string, grade: string) => `bean_price.${origin}.${gradeKey(grade)}`;
+// A grade's market price; falls back to the origin's first grade when the grade is unknown or not given.
+export function beanPrice(s: Record<string, number>, origin: string, grade?: string | null): number {
+  if (grade && s[beanPriceKey(origin, grade)] != null) return s[beanPriceKey(origin, grade)];
+  const first = BEAN_GRADES[origin as Origin]?.[0];
+  return (first ? s[beanPriceKey(origin, first)] : undefined) ?? s[`bean_price.${origin}`] ?? 0;
+}
+export const validGrade = (origin: string, grade: string) => (BEAN_GRADES[origin as Origin]?.includes(grade) ? grade : (BEAN_GRADES[origin as Origin]?.[0] ?? grade));
 export const INCOTERMS = ["EXW", "FCA", "FOB", "CFR", "CIF", "DAP"];
 
 export const ORDER_STATUS = {

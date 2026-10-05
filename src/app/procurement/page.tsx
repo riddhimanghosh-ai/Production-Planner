@@ -2,7 +2,7 @@ import { InventoryBoard } from "@/components/inventory-board";
 import { PageHeader, type StatItem } from "@/components/ui";
 import { store } from "@/data/store";
 import { planHorizon } from "@/lib/capacity";
-import { can, coffeeShare, monthLabel, ORIGINS, type Origin } from "@/lib/domain";
+import { beanPrice, can, coffeeShare, monthLabel, ORIGINS, type Origin } from "@/lib/domain";
 import { inventoryProjection, shortages } from "@/lib/inventory";
 import { describeMaterial } from "@/lib/procurement";
 import { settingsRows } from "@/lib/queries";
@@ -70,7 +70,7 @@ export default async function InventoryPage() {
         customer: st.customers.find((c) => c.id === o.customerId)?.name ?? "",
         origin: ORIGINS[o.beanOrigin as Origin],
         grade: o.gbGrade,
-        market: s[`bean_price.${o.beanOrigin}`],
+        market: beanPrice(s, o.beanOrigin, o.gbGrade),
         beanT: beanKg / 1000,
         firstMonth,
         approved: o.status === "COMMITTED",

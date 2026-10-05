@@ -2,7 +2,7 @@ import type { WizardState } from "@/components/order-wizard";
 import { store } from "@/data/store";
 import type { Order } from "@/data/types";
 import { loadLines, planHorizon } from "./capacity";
-import { addMonths, ORIGINS, planningStart } from "./domain";
+import { addMonths, ORIGINS, planningStart, BEAN_GRADES, beanPrice, type Origin } from "./domain";
 import { activeSkus, bdUsers, customers } from "./queries";
 import { loadSettings } from "./settings";
 import type { Viewer } from "./workflow";
@@ -17,7 +17,7 @@ export function orderFormProps(viewer: Viewer) {
     owners: bdUsers().map((u) => ({ id: u.id, name: u.name })),
     months: planHorizon(18),
     viewer: { id: viewer.id, role: viewer.role },
-    marketPrices: Object.fromEntries(Object.keys(ORIGINS).map((o) => [o, s[`bean_price.${o}`]])),
+    marketPrices: Object.fromEntries(Object.keys(ORIGINS).map((o) => [o, Object.fromEntries(BEAN_GRADES[o as Origin].map((g) => [g, beanPrice(s, o, g)]))])),
     leadDays: Object.fromEntries(Object.keys(ORIGINS).map((o) => [o, s[`lead.transit.${o}`] + s["lead.bean_buffer"]])),
     settings: s,
     pastSales: st.pastSales.map((p) => ({ ...p })),

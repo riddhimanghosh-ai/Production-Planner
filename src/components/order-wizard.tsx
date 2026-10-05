@@ -11,7 +11,7 @@ import {
   CURRENCIES,
   formatInr,
   FREIGHT_BASIS,
-  GB_GRADES,
+  BEAN_GRADES,
   INCOTERMS,
   monthLabel,
   ORIGINS,
@@ -264,7 +264,7 @@ export function OrderWizard({
   owners: { id: number; name: string }[];
   months: string[];
   viewer: { id: number | null; role: string };
-  marketPrices: Record<string, number>;
+  marketPrices: Record<string, Record<string, number>>;
   leadDays: Record<string, number>;
   settings: Record<string, number>;
   pastSales: PastSale[];
@@ -648,13 +648,14 @@ export function OrderWizard({
                   value={v.beanOrigin}
                   onChange={(e) => {
                     const o = e.target.value as Origin;
-                    setV((x) => ({ ...x, beanOrigin: o, gbClosedPrice: x.gbPriceClosed ? x.gbClosedPrice : marketPrices[o] }));
+                    const g = BEAN_GRADES[o][0];
+                    setV((x) => ({ ...x, beanOrigin: o, gbGrade: g, gbClosedPrice: x.gbPriceClosed ? x.gbClosedPrice : marketPrices[o]?.[g] }));
                   }}
                   className={field}
                 >
                   {(Object.keys(ORIGINS) as Origin[]).map((o) => (
                     <option key={o} value={o}>
-                      {ORIGINS[o]} · ₹{marketPrices[o]}/kg · {leadDays[o]} days
+                      {ORIGINS[o]} · {leadDays[o]} days
                     </option>
                   ))}
                 </select>
@@ -662,10 +663,12 @@ export function OrderWizard({
               </label>
               <label className="block text-sm sm:w-80">
                 <span className="text-xs font-semibold uppercase tracking-wide text-stone-700">Bean grade</span>
-                <select value={v.gbGrade} onChange={(e) => set("gbGrade", e.target.value)} className={field}>
+                <select value={v.gbGrade} onChange={(e) => setV((x) => ({ ...x, gbGrade: e.target.value, gbClosedPrice: x.gbPriceClosed ? x.gbClosedPrice : null }))} className={field}>
                   <option value="">Choose…</option>
-                  {GB_GRADES.map((g) => (
-                    <option key={g}>{g}</option>
+                  {(BEAN_GRADES[v.beanOrigin as Origin] ?? []).map((g) => (
+                    <option key={g} value={g}>
+                      {g} · ₹{marketPrices[v.beanOrigin]?.[g]}/kg
+                    </option>
                   ))}
                 </select>
                 <Err msg={errors.gbGrade} />
@@ -675,7 +678,7 @@ export function OrderWizard({
                   <input
                     type="checkbox"
                     checked={v.gbPriceClosed}
-                    onChange={(e) => setV((x) => ({ ...x, gbPriceClosed: e.target.checked, gbClosedPrice: x.gbClosedPrice ?? marketPrices[x.beanOrigin] ?? null }))}
+                    onChange={(e) => setV((x) => ({ ...x, gbPriceClosed: e.target.checked, gbClosedPrice: x.gbClosedPrice ?? marketPrices[x.beanOrigin]?.[x.gbGrade] ?? null }))}
                     className="h-5 w-5 accent-brand-600"
                   />
                   The bean price is already fixed with the supplier
@@ -945,7 +948,6 @@ export function OrderWizard({
     </div>
   );
 }
-
 
 function monthDiff(a: string, b: string) {
   const [ya, ma] = a.split("-").map(Number);

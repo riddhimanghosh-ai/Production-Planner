@@ -1,4 +1,5 @@
 import { store } from "@/data/store";
+import { BEAN_GRADES, beanPriceKey, ORIGINS, type Origin } from "./domain";
 
 export type SettingDef = { key: string; value: number; label: string; unit: string; grp: string };
 
@@ -9,9 +10,14 @@ export const PLANNING_GROUPS = ["Planning", "Lead times"];
 
 // Indicative figures for the prototype; leadership edits these in Settings.
 export const DEFAULT_SETTINGS: SettingDef[] = [
-  { key: "bean_price.VIETNAM", value: 390, label: "Green bean market price, Vietnam (Robusta)", unit: "₹/kg", grp: "Raw coffee & chicory" },
-  { key: "bean_price.BRAZIL", value: 425, label: "Green bean market price, Brazil", unit: "₹/kg", grp: "Raw coffee & chicory" },
-  { key: "bean_price.INDIA", value: 365, label: "Green bean market price, India", unit: "₹/kg", grp: "Raw coffee & chicory" },
+  // Green bean market price per origin and grade (Robusta cheaper than Arabica; indicative).
+  ...Object.entries({
+    INDIA: { "Robusta Cherry AA": 365, "Robusta Parchment AB": 395, "Arabica Plantation A": 540, "Arabica Cherry AB": 480 },
+    VIETNAM: { "Robusta Screen 16": 380, "Robusta Screen 18": 400 },
+    BRAZIL: { "Arabica Santos 17/18": 520, "Conilon Robusta 13": 410 },
+  } as Record<Origin, Record<string, number>>).flatMap(([origin, grades]) =>
+    BEAN_GRADES[origin as Origin].map((g) => ({ key: beanPriceKey(origin, g), value: grades[g] ?? 400, label: `Green bean market price, ${ORIGINS[origin as Origin]} · ${g}`, unit: "₹/kg", grp: "Raw coffee & chicory" })),
+  ),
   { key: "yield.SD", value: 2.4, label: "Green beans needed for 1 kg of Spray-dried", unit: "kg/kg", grp: "Raw coffee & chicory" },
   { key: "yield.AG", value: 2.45, label: "Green beans needed for 1 kg of Agglomerated", unit: "kg/kg", grp: "Raw coffee & chicory" },
   { key: "yield.FDC", value: 2.6, label: "Green beans needed for 1 kg of Freeze-dried", unit: "kg/kg", grp: "Raw coffee & chicory" },

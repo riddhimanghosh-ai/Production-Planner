@@ -1,5 +1,5 @@
 import { store } from "@/data/store";
-import { monthLabel, monthStartDate, ORIGINS, PRODUCT_TYPES, shipmentTonnes, type Origin, type ProductType } from "./domain";
+import { beanPrice, monthLabel, monthStartDate, ORIGINS, PRODUCT_TYPES, shipmentTonnes, type Origin, type ProductType } from "./domain";
 import { shortages, type Shortage } from "./inventory";
 import type { Order, OrderLine } from "@/data/types";
 import { freeAt, loadCapacityState } from "./capacity";
@@ -92,7 +92,7 @@ function beanCheck(order: Order, lines: OrderLine[]): Feasibility["bean"] {
   const cost = today.reduce((a, m) => a + m.totalCost, 0);
   const beanCost = today.reduce((a, m) => a + (m.lines[0]?.perKg ?? 0) * (m.revenue / Math.max(1, m.priceInrPerKg)), 0);
   const snap = order.marginSnapshot as { marginPct?: number; byLine?: Record<number, { beanPricePerKg?: number }> } | null;
-  const marketNow = s[`bean_price.${order.beanOrigin}`] ?? 0;
+  const marketNow = beanPrice(s, order.beanOrigin, order.gbGrade);
   const pricedAt = order.gbPriceClosed && order.gbClosedPrice ? order.gbClosedPrice : (Object.values(snap?.byLine ?? {})[0]?.beanPricePerKg ?? marketNow);
   const marginToday = revenue ? (margin / revenue) * 100 : 0;
   const minPct = s["margin.target_pct"];

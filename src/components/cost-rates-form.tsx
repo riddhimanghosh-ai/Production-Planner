@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { saveSettings } from "@/app/actions";
-import { ORIGINS, PACK_FORMATS, PRODUCT_TYPES } from "@/lib/domain";
+import { BEAN_GRADES, beanPriceKey, ORIGINS, PACK_FORMATS, PRODUCT_TYPES, type Origin } from "@/lib/domain";
 import { buttonClass, cx, tbl } from "./ui";
 
 type Values = Record<string, number>;
@@ -15,13 +15,16 @@ export function CostRatesForm({ values, editable }: { values: Values; editable: 
   return (
     <form action={action} className="space-y-3">
       <div className="grid gap-3 lg:grid-cols-2">
-        <Grid title="Green beans" cols={["Origin", "Market price ₹/kg"]}>
-          {Object.entries(ORIGINS).map(([k, name]) => (
-            <tr key={k}>
-              <td className={tbl.td}>{name}</td>
-              <td className={tbl.tdR}>{field(`bean_price.${k}`)}</td>
-            </tr>
-          ))}
+        <Grid title="Green beans, by origin and grade" cols={["Origin", "Grade", "Market price ₹/kg"]}>
+          {Object.entries(ORIGINS).flatMap(([k, name]) =>
+            BEAN_GRADES[k as Origin].map((g, i) => (
+              <tr key={`${k}-${g}`}>
+                <td className={cx(tbl.td, i > 0 && "text-stone-400")}>{i === 0 ? name : ""}</td>
+                <td className={tbl.td}>{g}</td>
+                <td className={tbl.tdR}>{field(beanPriceKey(k, g))}</td>
+              </tr>
+            )),
+          )}
         </Grid>
 
         <Grid title="By product" cols={["Product", "Beans per kg (kg)", "Making cost ₹/kg"]}>

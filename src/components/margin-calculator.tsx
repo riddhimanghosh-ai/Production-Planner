@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BLENDS, coffeeShare, CURRENCIES, formatInr, ORIGINS, PACK_FORMATS, PRODUCT_TYPES } from "@/lib/domain";
+import { BEAN_GRADES, beanPrice, BLENDS, coffeeShare, CURRENCIES, formatInr, ORIGINS, PACK_FORMATS, PRODUCT_TYPES, type Origin } from "@/lib/domain";
 import { computeMargin, type MarginInput } from "@/lib/margin";
 import type { Settings } from "@/lib/settings";
 import { cx, tbl } from "./ui";
@@ -16,7 +16,8 @@ export function MarginCalculator({ settings, products }: { settings: Settings; p
     packFormat: "BULK",
     quantityMt: 50,
     beanOrigin: "VIETNAM",
-    beanPrice: settings["bean_price.VIETNAM"],
+    gbGrade: BEAN_GRADES.VIETNAM[0],
+    beanPrice: beanPrice(settings, "VIETNAM", BEAN_GRADES.VIETNAM[0]),
     currency: "INR",
     pricePerKg: 1450,
     freightBasis: "SELLER",
@@ -24,7 +25,7 @@ export function MarginCalculator({ settings, products }: { settings: Settings; p
     creditDays: 30,
   });
   const set = <K extends keyof typeof v>(k: K, value: (typeof v)[K]) => setV((x) => ({ ...x, [k]: value }));
-  const market = settings[`bean_price.${v.beanOrigin}`];
+  const market = beanPrice(settings, v.beanOrigin, v.gbGrade);
   const fx = settings["fx.usd_inr"];
   const target = settings["margin.target_pct"];
   const [wanted, setWanted] = useState(target);
@@ -36,6 +37,7 @@ export function MarginCalculator({ settings, products }: { settings: Settings; p
       pricePerKg: Number(v.pricePerKg) || 0,
       currency: v.currency,
       beanOrigin: v.beanOrigin,
+      gbGrade: v.gbGrade,
       gbClosedPrice: Number(v.beanPrice) !== market ? Number(v.beanPrice) : null,
       freightBasis: v.freightBasis,
       advancePct: Number(v.advancePct) || 0,
@@ -90,7 +92,10 @@ export function MarginCalculator({ settings, products }: { settings: Settings; p
             <Num value={v.quantityMt} onChange={(x) => set("quantityMt", x)} />
           </F>
           <F label="Beans from">
-            <Select value={v.beanOrigin} onChange={(x) => setV((s) => ({ ...s, beanOrigin: x, beanPrice: settings[`bean_price.${x}`] }))} options={Object.entries(ORIGINS)} />
+            <Select value={v.beanOrigin} onChange={(x) => setV((s) => ({ ...s, beanOrigin: x, gbGrade: BEAN_GRADES[x as Origin][0], beanPrice: beanPrice(settings, x, BEAN_GRADES[x as Origin][0]) }))} options={Object.entries(ORIGINS)} />
+          </F>
+          <F label="Grade">
+            <Select value={v.gbGrade} onChange={(x) => setV((s) => ({ ...s, gbGrade: x, beanPrice: beanPrice(settings, s.beanOrigin, x) }))} options={(BEAN_GRADES[v.beanOrigin as Origin] ?? []).map((g) => [g, g])} />
           </F>
           <F label="Bean ₹/kg">
             <Num value={v.beanPrice} onChange={(x) => set("beanPrice", x)} />

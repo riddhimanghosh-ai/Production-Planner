@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Fragment, useActionState, useState, useTransition, type ReactNode } from "react";
 import { dismissRequestAction, gbClosureAction, purchaseOrderAction, receiveAction, saveBeanPrices } from "@/app/actions";
-import { currentMonth, monthLabel, ORIGINS, type Origin } from "@/lib/domain";
+import { BEAN_GRADES, currentMonth, gradeKey, monthLabel, ORIGINS, type Origin } from "@/lib/domain";
 import { ExportButton } from "./export-button";
 import { buttonClass, Card, cx, Segmented, tbl } from "./ui";
 
@@ -815,7 +815,9 @@ function PoRow({ po, canBuy, status }: { po: PO; canBuy: boolean; status: "overd
   );
 }
 
-function BeanPrices({ beanPrices, editable, openGb }: { beanPrices: { key: string; value: number }[]; editable: boolean; openGb: { origin: string }[] }) {
+function BeanPrices({ beanPrices, editable, openGb }: { beanPrices: { key: string; value: number }[]; editable: boolean; openGb: { origin: string; grade: string }[] }) {
+  // Rows in origin order, then the origin's grade order; a key is bean_price.<ORIGIN>.<GRADE>.
+  const rows = (Object.keys(ORIGINS) as Origin[]).flatMap((o) => BEAN_GRADES[o].map((g, i) => ({ origin: o, grade: g, first: i === 0, row: beanPrices.find((b) => b.key === `bean_price.${o}.${gradeKey(g)}`) })).filter((x) => x.row));
   const [state, action, pending] = useActionState(saveBeanPrices, {});
   return (
     <form action={action}>
@@ -834,20 +836,22 @@ function BeanPrices({ beanPrices, editable, openGb }: { beanPrices: { key: strin
           <thead>
             <tr>
               <th className={tbl.th}>Origin</th>
+              <th className={tbl.th}>Grade</th>
               <th className={tbl.thR}>₹/kg</th>
               <th className={tbl.thR}>Open orders</th>
             </tr>
           </thead>
           <tbody>
-            {beanPrices.map((b) => {
-              const name = ORIGINS[b.key.split(".")[1] as Origin];
+            {rows.map(({ origin, grade, first, row }) => {
+              const name = ORIGINS[origin];
               return (
-                <tr key={b.key}>
-                  <td className={tbl.td}>{name}</td>
+                <tr key={row!.key}>
+                  <td className={cx(tbl.td, "font-medium")}>{first ? name : ""}</td>
+                  <td className={tbl.td}>{grade}</td>
                   <td className={tbl.tdR}>
-                    <input name={b.key} type="number" min="0" defaultValue={b.value} disabled={!editable} className={cx(tbl.input, "w-20 text-right")} aria-label={`${name} price`} />
+                    <input name={row!.key} type="number" min="0" defaultValue={row!.value} disabled={!editable} className={cx(tbl.input, "w-20 text-right")} aria-label={`${name} ${grade} price`} />
                   </td>
-                  <td className={cx(tbl.tdR, "text-stone-600")}>{openGb.filter((o) => o.origin === name).length || "–"}</td>
+                  <td className={cx(tbl.tdR, "text-stone-600")}>{openGb.filter((o) => o.origin === name && o.grade === grade).length || "–"}</td>
                 </tr>
               );
             })}

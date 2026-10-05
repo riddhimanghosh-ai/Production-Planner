@@ -1,5 +1,5 @@
 import type { Sku } from "@/data/types";
-import { PACK_FORMATS, PRODUCT_TYPES, type PackFormat, type ProductType } from "./domain";
+import { beanPrice as marketBeanPrice, PACK_FORMATS, PRODUCT_TYPES, type PackFormat, type ProductType } from "./domain";
 import type { Settings } from "./settings";
 
 export type MarginInput = {
@@ -8,6 +8,7 @@ export type MarginInput = {
   pricePerKg: number;
   currency: string;
   beanOrigin: string;
+  gbGrade?: string | null;
   gbClosedPrice?: number | null;
   freightBasis: string;
   advancePct: number;
@@ -34,7 +35,7 @@ export function computeMargin(input: MarginInput, s: Settings): MarginResult {
   const kg = quantityMt * 1000;
   const priceInr = input.currency === "USD" ? input.pricePerKg * s["fx.usd_inr"] : input.pricePerKg;
   const closed = input.gbClosedPrice != null && input.gbClosedPrice > 0;
-  const beanPrice = closed ? input.gbClosedPrice! : s[`bean_price.${beanOrigin}`];
+  const beanPrice = closed ? input.gbClosedPrice! : marketBeanPrice(s, beanOrigin, input.gbGrade);
   const beanYield = s[`yield.${sku.productType}`];
 
   const greenBean = sku.coffeeShare * beanYield * beanPrice;

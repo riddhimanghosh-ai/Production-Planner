@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { CancelOrderButton, DecisionForm, GbClosureForm, ReassignForm } from "@/components/approval-actions";
 import { Badge, ButtonLink, cx, StatusBadge, Tabs, tbl } from "@/components/ui";
 import { capacityAt, loadAt, loadCapacityState } from "@/lib/capacity";
-import { can, formatDate, formatInr, formatPerKg, FREIGHT_BASIS, monthLabel, ORIGINS, productLabel, type Origin } from "@/lib/domain";
+import { beanPrice, can, formatDate, formatInr, formatPerKg, FREIGHT_BASIS, monthLabel, ORIGINS, productLabel, type Origin } from "@/lib/domain";
 import { shortages } from "@/lib/inventory";
 import { bdUsers, getOrderView } from "@/lib/queries";
 import { getViewer } from "@/lib/role";
@@ -260,7 +260,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
                     ["Contact", order.contactPerson, "Deliver to", `${order.destinationPort}, ${order.destinationCountry}`],
                     ["Customer type", order.customerType === "NEW" ? "New" : "Repeat", "Freight", FREIGHT_BASIS[order.freightBasis as keyof typeof FREIGHT_BASIS]],
                     ["Bean origin", `${ORIGINS[order.beanOrigin as Origin]} · ${order.gbGrade}`, "Shipping term", order.incoterm],
-                    ["Bean price", order.gbPriceClosed ? `Fixed ₹${order.gbClosedPrice}/kg` : `Market ₹${s[`bean_price.${order.beanOrigin}`]}/kg`, "Price", commercials ? `${cur}${lines[0]?.pricePerKg.toLocaleString("en-IN")}/kg` : "–"],
+                    ["Bean price", order.gbPriceClosed ? `Fixed ₹${order.gbClosedPrice}/kg` : `Market ₹${beanPrice(s, order.beanOrigin, order.gbGrade)}/kg`, "Price", commercials ? `${cur}${lines[0]?.pricePerKg.toLocaleString("en-IN")}/kg` : "–"],
                     ["Beans needed", `${(margin.greenBeanKg / 1000).toLocaleString("en-IN", { maximumFractionDigits: 1 })} t`, "Payment", `${order.paymentMode} · ${order.advancePct}% advance · ${order.creditDays} days`],
                   ] as string[][]
                 ).map((r) => (
@@ -282,7 +282,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
               </tbody>
             </table>
           </div>
-          {can(viewer.role, ["PROCUREMENT", "COO"]) && <GbClosureForm orderId={order.id} closed={order.gbPriceClosed} price={order.gbClosedPrice} marketPrice={s[`bean_price.${order.beanOrigin}`]} compact />}
+          {can(viewer.role, ["PROCUREMENT", "COO"]) && <GbClosureForm orderId={order.id} closed={order.gbPriceClosed} price={order.gbClosedPrice} marketPrice={beanPrice(s, order.beanOrigin, order.gbGrade)} compact />}
           {can(viewer.role, ["BD_HEAD"]) && <ReassignForm orderId={order.id} owners={bdUsers().map((u) => ({ id: u.id, name: u.name }))} ownerId={order.bdOwnerId} priority={order.priority} />}
         </div>
       )}

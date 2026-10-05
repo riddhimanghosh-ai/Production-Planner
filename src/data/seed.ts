@@ -1,5 +1,5 @@
 import { loadCapacityState } from "@/lib/capacity";
-import { addDays, addMonths, currentMonth, isoDate, monthRange, shipmentTonnes, type ApproverRole } from "@/lib/domain";
+import { addDays, addMonths, currentMonth, isoDate, monthRange, shipmentTonnes, validGrade, type ApproverRole } from "@/lib/domain";
 import { inventoryProjection, shortages } from "@/lib/inventory";
 import { describeMaterial } from "@/lib/procurement";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
@@ -371,7 +371,7 @@ export function seedStore() {
         destinationPort: o.city,
         incoterm: o.incoterm,
         freightBasis: o.freight,
-        gbGrade: o.grade,
+        gbGrade: validGrade(o.origin, o.grade),
         beanOrigin: o.origin,
         gbPriceClosed: !!o.gbClosed,
         gbClosedPrice: o.gbClosed ?? null,

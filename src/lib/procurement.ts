@@ -1,5 +1,5 @@
 import type { Sku } from "@/data/types";
-import { addDays, addMonths, isoDate, monthStartDate, ORIGINS, type Origin } from "./domain";
+import { addDays, addMonths, beanPrice, isoDate, monthStartDate, ORIGINS, type Origin } from "./domain";
 import type { Settings } from "./settings";
 
 export const MATERIAL_GROUPS = ["Green beans", "Chicory", "Packing material", "Cans"] as const;
@@ -27,11 +27,7 @@ export function describeMaterial(key: string): { group: MaterialGroup; name: str
   return { group: "Packing material", name: "Customer labels", unit: "labels" };
 }
 
-export function materialLeads(
-  sku: Pick<Sku, "packFormat"> & { coffeeShare: number },
-  beanOrigin: string,
-  s: Settings,
-): { material: string; days: number }[] {
+export function materialLeads(sku: Pick<Sku, "packFormat"> & { coffeeShare: number }, beanOrigin: string, s: Settings): { material: string; days: number }[] {
   const leads = [
     { material: `Green beans (${ORIGINS[beanOrigin as Origin] ?? beanOrigin})`, days: s[`lead.transit.${beanOrigin}`] + s["lead.bean_buffer"] },
     { material: sku.packFormat === "CAN" ? "Printed cans" : sku.packFormat === "GLASS" ? "Glass jars & labels" : "Export cartons", days: s[sku.packFormat === "CAN" ? "lead.cans" : "lead.packaging"] },
@@ -41,12 +37,7 @@ export function materialLeads(
 }
 
 // Earliest production month whose materials can be on site if ordered on `asOfIso`.
-export function earliestMaterialMonth(
-  sku: Pick<Sku, "packFormat"> & { coffeeShare: number },
-  beanOrigin: string,
-  s: Settings,
-  asOfIso: string,
-) {
+export function earliestMaterialMonth(sku: Pick<Sku, "packFormat"> & { coffeeShare: number }, beanOrigin: string, s: Settings, asOfIso: string) {
   const binding = materialLeads(sku, beanOrigin, s).sort((a, b) => b.days - a.days)[0];
   const arrival = addDays(new Date(`${asOfIso}T00:00:00Z`), binding.days);
   const neededStart = addDays(arrival, s["lead.material_before_production"]);
@@ -80,7 +71,7 @@ export function requirementsFor(
     quantity: beanKg,
     unit: "kg",
     orderBy: due(s[`lead.transit.${order.beanOrigin}`] + s["lead.bean_buffer"]),
-    estCostInr: beanKg * (order.gbClosedPrice || s[`bean_price.${order.beanOrigin}`]),
+    estCostInr: beanKg * (order.gbClosedPrice || beanPrice(s, order.beanOrigin, order.gbGrade)),
   });
 
   if (sku.coffeeShare < 1) {

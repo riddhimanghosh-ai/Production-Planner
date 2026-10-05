@@ -16,6 +16,7 @@ export function lineMarginFor(ol: OrderLine, order: Order, s: Settings): MarginR
       pricePerKg: ol.pricePerKg,
       currency: order.currency,
       beanOrigin: order.beanOrigin,
+      gbGrade: order.gbGrade,
       gbClosedPrice: order.gbPriceClosed ? order.gbClosedPrice : null,
       freightBasis: order.freightBasis,
       advancePct: order.advancePct,
@@ -51,7 +52,17 @@ export function avgMarginPerKgByProduct(s: Settings): Record<string, { perKg: nu
     if (a && a.qty > 0) out[pt] = { perKg: a.margin / (a.qty * 1000), pct: a.revenue ? (a.margin / a.revenue) * 100 : 0, fromOrders: true };
     else {
       const m = computeMargin(
-        { sku: { productType: pt, blend: "PURE", packFormat: "BULK", coffeeShare: 1 }, quantityMt: 1, pricePerKg: TYPICAL_INR_PER_KG[pt] ?? 1450, currency: "INR", beanOrigin: "VIETNAM", gbClosedPrice: null, freightBasis: "BUYER", advancePct: 0, creditDays: 30 },
+        {
+          sku: { productType: pt, blend: "PURE", packFormat: "BULK", coffeeShare: 1 },
+          quantityMt: 1,
+          pricePerKg: TYPICAL_INR_PER_KG[pt] ?? 1450,
+          currency: "INR",
+          beanOrigin: "VIETNAM",
+          gbClosedPrice: null,
+          freightBasis: "BUYER",
+          advancePct: 0,
+          creditDays: 30,
+        },
         s,
       );
       out[pt] = { perKg: m.marginPerKg, pct: m.marginPct, fromOrders: false };
