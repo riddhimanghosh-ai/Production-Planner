@@ -74,6 +74,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
           <thead>
             <tr>
               <th className={tbl.th}>Product</th>
+              <th className={tbl.th}>Green beans</th>
               <th className={tbl.th}>Ship month</th>
               <th className={tbl.thR}>Tonnes</th>
               <th className={tbl.thR}>Value</th>
@@ -86,6 +87,10 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
           <tbody>
             <tr>
               <td className={tbl.td}>{productName}</td>
+              <td className={cx(tbl.td, "whitespace-nowrap")}>
+                {ORIGINS[order.beanOrigin as Origin] ?? order.beanOrigin} · {order.gbGrade}
+                <div className="text-[11px] text-stone-500">{order.gbPriceClosed ? `Fixed ₹${order.gbClosedPrice}/kg` : `Market ₹${beanPrice(s, order.beanOrigin, order.gbGrade)}/kg`}</div>
+              </td>
               <td className={tbl.td}>{monthLabel(order.shipments?.[0]?.month ?? data.firstMonth)}</td>
               <td className={tbl.tdR}>{data.totalMt.toLocaleString("en-IN")}</td>
               <td className={tbl.tdR}>{commercials ? formatInr(margin.revenue) : "–"}</td>
@@ -145,7 +150,8 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/or
                 <tr>
                   <td className={cx(tbl.td, "bg-stone-50 text-stone-500")}>Input costs</td>
                   <td className={cx(tbl.td, feas.bean.risk === "high" ? "text-red-700" : "text-stone-900")}>
-                    Beans {feas.bean.fixed ? `fixed at ₹${feas.bean.pricedAt}/kg` : `not fixed, market ₹${feas.bean.marketNow}/kg`} ({feas.bean.shareOfCost.toFixed(0)}% of cost)
+                    {ORIGINS[feas.bean.origin as Origin] ?? feas.bean.origin} {feas.bean.grade} beans {feas.bean.fixed ? `fixed at ₹${feas.bean.pricedAt}/kg` : `not fixed, market ₹${feas.bean.marketNow}/kg`} ({feas.bean.shareOfCost.toFixed(0)}% of
+                    cost)
                     {feas.bean.costs
                       .filter((c) => c.then != null && Math.abs(c.now - c.then) >= 0.5)
                       .map((c) => ` · ${c.label} ${c.now > (c.then ?? 0) ? "up" : "down"} ₹${Math.round(Math.abs(c.now - (c.then ?? 0)))}/kg`)
