@@ -1,8 +1,8 @@
 import { InventoryBoard } from "@/components/inventory-board";
-import { PageHeader, type StatItem } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
 import { store } from "@/data/store";
 import { planHorizon } from "@/lib/capacity";
-import { beanPrice, can, coffeeShare, monthLabel, ORIGINS, type Origin } from "@/lib/domain";
+import { beanPrice, can, coffeeShare, ORIGINS, type Origin } from "@/lib/domain";
 import { inventoryProjection, shortages } from "@/lib/inventory";
 import { describeMaterial } from "@/lib/procurement";
 import { settingsRows } from "@/lib/queries";
@@ -78,18 +78,9 @@ export default async function InventoryPage() {
     })
     .sort((a, b) => a.firstMonth.localeCompare(b.firstMonth));
 
-  const pos = st.purchaseOrders.filter((p) => p.status === "ORDERED").sort((a, b) => a.arrivalMonth.localeCompare(b.arrivalMonth));
-  const shortKeys = new Set(shorts.map((x) => x.key)).size;
-  const stats: StatItem[] = [
-    { label: "Materials short", value: shortKeys, hint: shortKeys ? "Not covered by stock or purchases" : "Plan is covered", tone: shortKeys ? "red" : "green" },
-    { label: "To buy now", value: attention.length, hint: attention[0] ? `Most urgent: ${attention[0].name}` : "Nothing to buy" },
-    { label: "Purchases on the way", value: pos.length, hint: pos[0] ? `Next arrives ${monthLabel(pos[0].arrivalMonth)}` : "None open" },
-    { label: "Bean price not fixed", value: openGb.length, hint: openGb.length ? "Orders still at market price" : "All orders fixed" },
-  ];
-
   return (
     <>
-      <PageHeader eyebrow="03 / Materials" title="Inventory &" emph="purchasing" subtitle="Stock, purchases on the way, and what the plan still needs." stats={stats} />
+      <PageHeader eyebrow="03 / Materials" title="Inventory &" emph="purchasing" subtitle="Stock, purchases on the way, and what the plan still needs." />
       <InventoryBoard
         months={months}
         rows={projection.map((r) => ({
