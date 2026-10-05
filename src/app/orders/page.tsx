@@ -2,7 +2,7 @@ import Link from "next/link";
 import { QuickDecision } from "@/components/approval-actions";
 import { ExportButton } from "@/components/export-button";
 import { Badge, ButtonLink, cx, Empty, PageHeader, Pager, Segmented, StatusBadge, Tabs, tbl, type StatItem, type Tone } from "@/components/ui";
-import { can, formatInr, monthLabel, ORDER_STATUS, productLabel, type OrderStatus } from "@/lib/domain";
+import { can, formatInr, monthLabel, ORDER_STATUS, ORIGINS, productLabel, type Origin, type OrderStatus } from "@/lib/domain";
 import { shortages } from "@/lib/inventory";
 import { Sellable } from "@/components/sellable";
 import { loadCapacityState, packLoadAt, planHorizon } from "@/lib/capacity";
@@ -123,12 +123,13 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
   const page = Math.min(Math.max(1, Number(sp.page) || 1), pages);
   const pageHref = (p: number) => `/orders?status=${filter.key}${q ? `&q=${encodeURIComponent(q)}` : ""}&page=${p}`;
   const exportRows = [
-    ["Order", "Customer", "Salesperson", "Product", "Tonnes", "From", "To", "Value (INR)", "Profit %", "Status"],
+    ["Order", "Customer", "Salesperson", "Product", "Green beans", "Tonnes", "From", "To", "Value (INR)", "Profit %", "Status"],
     ...rows.map((v) => [
       v.order.ref,
       v.customer.name,
       v.owner?.name,
       v.lines[0] ? productLabel(v.lines[0].sku, v.lines[0].chicoryPct) : "",
+      `${ORIGINS[v.order.beanOrigin as Origin] ?? v.order.beanOrigin} · ${v.order.gbGrade}`,
       v.totalMt,
       monthLabel(v.firstMonth),
       monthLabel(v.lastMonth),
@@ -183,6 +184,9 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
                     <StatusBadge status={v.order.status} />
                   </div>
                   <div className="mt-2 text-[13px] text-stone-700">{first ? productLabel(first.sku, first.chicoryPct) : "–"}</div>
+                  <div className="text-[12px] text-stone-500">
+                    {ORIGINS[v.order.beanOrigin as Origin] ?? v.order.beanOrigin} · {v.order.gbGrade}
+                  </div>
                   <div className="mt-2 grid grid-cols-3 gap-2 border-t border-stone-200 pt-2 text-[12px]">
                     <div>
                       <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-stone-500">Tonnes</div>
@@ -214,6 +218,7 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
                   <th className={tbl.th}>Customer</th>
                   <th className={tbl.th}>Salesperson</th>
                   <th className={tbl.th}>Product</th>
+                  <th className={tbl.th}>Green beans</th>
                   <th className={tbl.thR}>Tonnes</th>
                   <th className={tbl.th}>Ship month</th>
                   <th className={tbl.thR}>Value</th>
@@ -236,6 +241,10 @@ async function OrderList({ sp, viewer }: { sp: Record<string, string | string[] 
                       <td className={cx(tbl.td, "font-medium text-stone-900")}>{v.customer.name}</td>
                       <td className={cx(tbl.td, "text-stone-600")}>{v.owner?.name}</td>
                       <td className={tbl.td}>{first ? productLabel(first.sku, first.chicoryPct) : "–"}</td>
+                      <td className={cx(tbl.td, "whitespace-nowrap text-stone-600")}>
+                        {ORIGINS[v.order.beanOrigin as Origin] ?? v.order.beanOrigin} · {v.order.gbGrade}
+                        {v.order.gbPriceClosed && <span className="ml-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-emerald-700">fixed</span>}
+                      </td>
                       <td className={tbl.tdR}>{v.totalMt.toLocaleString("en-IN")}</td>
                       <td className={cx(tbl.td, "whitespace-nowrap")}>{monthLabel(v.order.shipments?.[0]?.month ?? v.firstMonth)}</td>
                       <td className={tbl.tdR}>{v.commercials ? formatInr(v.margin.revenue) : <span className="text-stone-400">hidden</span>}</td>
