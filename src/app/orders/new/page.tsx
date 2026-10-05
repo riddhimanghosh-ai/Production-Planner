@@ -17,7 +17,7 @@ export default async function NewOrderPage({ searchParams }: PageProps<"/orders/
   }
   return (
     <>
-      <PageHeader eyebrow="01 / Orders" title="New" emph="order" subtitle="Check availability first, then fill in the order and send it for approval." />
+      <PageHeader eyebrow="01 / Orders" title="New" emph="order" subtitle="Fill in the order, review it, and send it for approval. Checking room on the lines is an optional last step." />
       <OrderWizard
         initial={blankWizard(viewer, {
           product: typeof sp.product === "string" ? sp.product : undefined,

@@ -42,14 +42,18 @@ export type WizardState = Omit<OrderInput, "lines"> & {
   manual: Record<string, Record<number, number>> | null;
 };
 
-const STEPS = [
-  { key: "what", title: "Check availability", hint: "" },
+// The availability check sits last, as a good-to-have: the order can be sent from Review or from there.
+const STEPS: { key: string; title: string; hint: string; tag?: string }[] = [
+  { key: "what", title: "Product", hint: "What, how much, when" },
   { key: "customer", title: "Customer", hint: "Who is buying" },
   { key: "delivery", title: "Delivery", hint: "Where it goes" },
   { key: "beans", title: "Raw coffee", hint: "Which green beans" },
   { key: "price", title: "Price & payment", hint: "Price, terms and profit" },
   { key: "review", title: "Review & submit", hint: "Check and send for approval" },
-] as const;
+  { key: "avail", title: "Check availability", hint: "Will it fit the lines?", tag: "Good to have" },
+];
+const REVIEW = 5;
+const AVAIL = 6;
 
 const field = "mt-0.5 block w-full rounded-sm border border-stone-300 bg-white px-2 py-1 text-[13px] outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-200 disabled:bg-stone-50";
 const tonnes = (kgOrT: number, unit = "t") => `${kgOrT.toLocaleString("en-IN", { maximumFractionDigits: 1 })} ${unit}`;
@@ -364,8 +368,9 @@ export function OrderWizard({
     !!v.beanOrigin && !!v.gbGrade && (!v.gbPriceClosed || (v.gbClosedPrice ?? 0) > 0),
     v.pricePerKg > 0 && !!v.paymentMode,
     false,
+    false,
   ];
-  const canGoNext = step < 5 && stepDone[step];
+  const canGoNext = step < AVAIL && (step === REVIEW || stepDone[step]);
 
   const save = (intent: "draft" | "submit") =>
     startSave(async () => {
@@ -444,7 +449,7 @@ export function OrderWizard({
                 type="button"
                 onClick={() => setStep(i)}
                 className={cx(
-                  "-mb-px mr-5 flex items-center gap-1.5 whitespace-nowrap border-b-2 py-2 text-[14px] font-semibold transition-colors",
+                  "-mb-px mr-4 flex items-center gap-1.5 whitespace-nowrap border-b-2 py-2 text-[13px] font-semibold transition-colors",
                   i === step ? "border-brand-600 text-stone-900" : "border-transparent text-stone-500 hover:text-stone-900",
                 )}
               >
@@ -452,13 +457,14 @@ export function OrderWizard({
                   {stepDone[i] ? "✓" : i + 1}
                 </span>
                 {st.title}
+                {st.tag && <span className="font-mono text-[9px] font-normal uppercase tracking-[0.12em] text-stone-400">{st.tag}</span>}
               </button>
             </li>
           ))}
         </ol>
 
         {message && <div className="mb-2 border border-red-300 bg-red-50 px-3 py-1.5 text-[13px] text-red-800">{message}, see the steps marked below.</div>}
-        {live && step !== 5 && (
+        {live && step < REVIEW && (
           <div className="mb-2 border border-amber-300 bg-amber-50 px-3 py-1.5 text-[13px] text-amber-900">
             This order is {status === "COMMITTED" ? "approved" : "waiting for approval"}. Changing tonnes, months, lines, price or the bean price sends it back to the CFO and COO.
           </div>
@@ -467,7 +473,7 @@ export function OrderWizard({
         <section className="rounded-md border border-stone-300 bg-white p-4">
           <div className="mb-3 flex items-baseline gap-2 border-b border-stone-200 pb-2">
             <h2 className="text-sm font-semibold text-stone-900">
-              Step {step + 1} of 6 · {STEPS[step].title}
+              Step {step + 1} of {STEPS.length} · {STEPS[step].title}
             </h2>
           </div>
 
@@ -528,6 +534,20 @@ export function OrderWizard({
 
               {v.productType && makeable(v.productType) && !sku && <p className="border border-amber-300 bg-amber-50 px-3 py-1.5 text-[13px] text-amber-900">Not in the product list, pick another recipe or packing.</p>}
 
+              {v.productType && !makeable(v.productType) && (
+                <div className="border border-red-300 bg-red-50 px-3 py-2 text-[13px] text-red-900">
+                  ✕ No production line makes {PRODUCT_TYPES[v.productType as ProductType]} yet, so it can&apos;t be booked.{" "}
+                  <Link href="/capacity" className="font-semibold underline">
+                    Set up a line
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === AVAIL && (
+            <div className="space-y-3">
+              <p className="text-[13px] text-stone-600">Optional: see whether the lines have room in the ship month before sending. The COO checks this again at approval either way.</p>
               {v.productType && !makeable(v.productType) ? (
                 <div className="border border-red-300 bg-red-50 px-3 py-2 text-[13px] text-red-900">
                   ✕ No production line makes {PRODUCT_TYPES[v.productType as ProductType]} yet, so it can&apos;t be booked.{" "}
@@ -913,8 +933,13 @@ export function OrderWizard({
               </button>
             )}
             <div className="ml-auto flex gap-2">
-              {step === 5 ? (
+              {step >= REVIEW ? (
                 <>
+                  {step === REVIEW && (
+                    <button type="button" onClick={() => setStep(AVAIL)} className="rounded-sm border border-stone-300 px-3 py-1.5 text-[13px] font-medium text-stone-700 hover:bg-stone-50">
+                      Check availability →
+                    </button>
+                  )}
                   {!live && (
                     <button type="button" disabled={saving} onClick={() => save("draft")} className="rounded-sm border border-stone-300 px-3 py-1.5 text-[13px] font-medium text-stone-700 hover:bg-stone-50">
                       Save as draft
