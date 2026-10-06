@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ExportButton } from "@/components/export-button";
-import { AddCustomerForm, AddUserForm, ToggleSkuButton } from "@/components/master-forms";
+import { AddCustomerForm, AddUserForm, SkuPriorityForm, ToggleSkuButton } from "@/components/master-forms";
 import { Badge, Card, Empty, PageHeader, Tabs } from "@/components/ui";
 import { store } from "@/data/store";
 import { loadLines } from "@/lib/capacity";
@@ -130,6 +130,7 @@ export default async function MasterPage({ searchParams }: PageProps<"/master">)
                 <th className="py-2 text-left font-medium">Blend</th>
                 <th className="py-2 text-left font-medium">Pack</th>
                 <th className="py-2 text-left font-medium">Status</th>
+                <th className="py-2 text-left font-medium">Sales priority</th>
                 {isAdmin && <th />}
               </tr>
             </thead>
@@ -143,6 +144,9 @@ export default async function MasterPage({ searchParams }: PageProps<"/master">)
                     {PACK_FORMATS[s.packFormat as PackFormat]} · {s.packSizeKg >= 1 ? `${s.packSizeKg} kg` : `${s.packSizeKg * 1000} g`}
                   </td>
                   <td className="py-2">{s.active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>}</td>
+                  <td className="py-2">
+                    <SkuPriorityForm skuId={s.id} priority={s.salesPriority ?? "NORMAL"} note={s.salesNote ?? ""} editable={can(viewer.role, ["ADMIN", "CFO", "COO", "BD_HEAD"])} />
+                  </td>
                   {isAdmin && (
                     <td className="py-2 text-right">
                       <ToggleSkuButton skuId={s.id} active={s.active} />
@@ -152,7 +156,10 @@ export default async function MasterPage({ searchParams }: PageProps<"/master">)
               ))}
             </tbody>
           </table>
-          <p className="mt-3 text-xs text-stone-500">The MoM counts 9 product categories; confirm the exact list with SLN. Cost norms per form and pack are on the Margins → Cost norms tab.</p>
+          <p className="mt-3 text-xs text-stone-500">
+            Sales priority: products marked Push appear as &ldquo;Recommended to sell&rdquo; on the salesperson&apos;s Orders page with room on the lines and the margin they earn; Avoid is shown as a warning. Cost norms per form and pack are under
+            Profit &amp; costs, Cost rates.
+          </p>
         </Card>
       )}
 

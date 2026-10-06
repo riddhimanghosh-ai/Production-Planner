@@ -27,7 +27,7 @@ export function lineMarginFor(ol: OrderLine, order: Order, s: Settings): MarginR
 }
 
 // Indicative prices for a product with no orders yet (₹ per kg, bulk).
-const TYPICAL_INR_PER_KG: Record<string, number> = { SD: 1450, AG: 1580, FDC: 2460 };
+export const TYPICAL_INR_PER_KG: Record<string, number> = { SD: 1450, AG: 1580, FDC: 2460 };
 
 // Average profit per kg for each product, weighted by tonnes, across approved and waiting orders.
 // Used to put a rupee value on line capacity. Falls back to a typical bulk order when a product has none.

@@ -468,3 +468,21 @@ export async function resetDemoData() {
   resetStore();
   done();
 }
+
+// Leadership marks which products sales should push (or avoid), with a one-line reason.
+export async function setSkuPriority(_prev: { message?: string }, formData: FormData): Promise<{ message?: string }> {
+  try {
+    await requireRole(["ADMIN", "CFO", "COO", "BD_HEAD"]);
+  } catch (e) {
+    return { message: (e as Error).message };
+  }
+  const sku = store().skus.find((x) => x.id === Number(formData.get("skuId")));
+  if (!sku) return { message: "Product not found" };
+  const p = String(formData.get("priority") ?? "NORMAL");
+  sku.salesPriority = p === "HIGH" || p === "LOW" ? p : "NORMAL";
+  sku.salesNote = String(formData.get("note") ?? "")
+    .trim()
+    .slice(0, 120);
+  done();
+  return { message: "Saved" };
+}

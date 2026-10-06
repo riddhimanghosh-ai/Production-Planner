@@ -4,7 +4,10 @@ import { addMonths, monthLabel, planningStart, productLabel, PRODUCT_TYPES, type
 import { inventoryProjection } from "./inventory";
 import { requirementsFor } from "./procurement";
 import { loadSettings, type Settings } from "./settings";
-import { lineMarginFor } from "./order-margin";
+import { lineMarginFor, TYPICAL_INR_PER_KG } from "./order-margin";
+import { computeMargin } from "./margin";
+import { packLoadAt } from "./capacity";
+import { coffeeShare, BEAN_GRADES } from "./domain";
 import { withShare } from "./workflow";
 
 // One thing for the planner to place: a new order's slot, or the extra tonnes in an overbooked month.
@@ -196,3 +199,70 @@ function monthDiff(a: string, b: string) {
 }
 
 const fmt = (n: number) => `${n.toLocaleString("en-IN", { maximumFractionDigits: 1 })} t`;
+
+// What leadership wants sold now: products marked Push (and Avoid) in Settings, with room on the lines and the margin they earn.
+export type RecommendedProduct = {
+  skuId: number;
+  code: string;
+  productType: string;
+  blend: string;
+  packFormat: string;
+  priority: "HIGH" | "LOW";
+  note: string;
+  free3: number;
+  priceKg: number;
+  marginPct: number;
+  marginPerKg: number;
+  fromSales: boolean;
+};
+
+export function recommendedProducts(months: string[]): RecommendedProduct[] {
+  const st = store();
+  const s = loadSettings();
+  const state = loadCapacityState();
+  const room = openRoom(months.slice(0, 3));
+  return st.skus
+    .filter((k) => k.active && (k.salesPriority === "HIGH" || k.salesPriority === "LOW"))
+    .map((k) => {
+      const line = room.find((r) => r.productType === k.productType);
+      const free3 = months.slice(0, 3).reduce((a, m) => {
+        const packFree = Math.max(0, (s[`pack_capacity.${k.packFormat}`] ?? Infinity) - packLoadAt(state, k.packFormat, m));
+        return a + Math.min(line?.months[m]?.free ?? 0, packFree);
+      }, 0);
+      // Typical price: average of past sales for this form and pack, else the indicative bulk price.
+      const sales = st.pastSales.filter((p) => p.productType === k.productType && p.packFormat === k.packFormat && p.currency === "INR");
+      const priceKg = sales.length
+        ? Math.round(sales.reduce((a, p) => a + p.pricePerKg * p.quantityMt, 0) / sales.reduce((a, p) => a + p.quantityMt, 0))
+        : (TYPICAL_INR_PER_KG[k.productType] ?? 1450) + (k.packFormat === "GLASS" ? 180 : k.packFormat === "CAN" ? 120 : 0);
+      const m = computeMargin(
+        {
+          sku: { productType: k.productType, blend: k.blend, packFormat: k.packFormat, coffeeShare: coffeeShare(k.blend, 30) },
+          quantityMt: 1,
+          pricePerKg: priceKg,
+          currency: "INR",
+          beanOrigin: "VIETNAM",
+          gbGrade: BEAN_GRADES.VIETNAM[0],
+          gbClosedPrice: null,
+          freightBasis: "BUYER",
+          advancePct: 0,
+          creditDays: 30,
+        },
+        s,
+      );
+      return {
+        skuId: k.id,
+        code: k.code,
+        productType: k.productType,
+        blend: k.blend,
+        packFormat: k.packFormat,
+        priority: k.salesPriority as "HIGH" | "LOW",
+        note: k.salesNote ?? "",
+        free3: Math.round(free3 * 10) / 10,
+        priceKg,
+        marginPct: m.marginPct,
+        marginPerKg: m.marginPerKg,
+        fromSales: sales.length > 0,
+      };
+    })
+    .sort((a, b) => Number(a.priority === "LOW") - Number(b.priority === "LOW") || b.marginPct - a.marginPct);
+}

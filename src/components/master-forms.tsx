@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useTransition } from "react";
-import { addCustomer, addUser, toggleSku } from "@/app/actions";
+import { addCustomer, addUser, setSkuPriority, toggleSku } from "@/app/actions";
 import { ROLE_LABELS, ROLES } from "@/lib/domain";
 import { buttonClass } from "./ui";
 
@@ -59,5 +59,31 @@ export function ToggleSkuButton({ skuId, active }: { skuId: number; active: bool
     <button type="button" disabled={pending} onClick={() => start(() => toggleSku(skuId))} className="text-xs font-medium text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-brand-600 disabled:opacity-50">
       {active ? "Deactivate" : "Activate"}
     </button>
+  );
+}
+
+// Sales priority per product: High (push it), Normal, Low (avoid), plus the reason the salesperson sees.
+export function SkuPriorityForm({ skuId, priority, note, editable }: { skuId: number; priority: string; note: string; editable: boolean }) {
+  const [state, action, pending] = useActionState(setSkuPriority, {});
+  if (!editable)
+    return (
+      <span className="text-[13px]">
+        <b className={priority === "HIGH" ? "text-emerald-700" : priority === "LOW" ? "text-red-700" : "text-stone-500"}>{priority === "HIGH" ? "Push" : priority === "LOW" ? "Avoid" : "Normal"}</b>
+        {note && <span className="ml-1.5 text-stone-500">{note}</span>}
+      </span>
+    );
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-1.5">
+      <input type="hidden" name="skuId" value={skuId} />
+      <select name="priority" defaultValue={priority} className="w-24" aria-label="Sales priority">
+        <option value="HIGH">Push</option>
+        <option value="NORMAL">Normal</option>
+        <option value="LOW">Avoid</option>
+      </select>
+      <input name="note" defaultValue={note} placeholder="Why, in a line" className="w-72" aria-label="Reason" />
+      <button type="submit" disabled={pending} className={buttonClass("secondary", "sm")}>
+        {pending ? "…" : state.message === "Saved" ? "Saved" : "Save"}
+      </button>
+    </form>
   );
 }

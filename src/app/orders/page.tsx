@@ -6,7 +6,8 @@ import { can, formatInr, monthLabel, ORDER_STATUS, ORIGINS, productLabel, type O
 import { shortages } from "@/lib/inventory";
 import { Sellable } from "@/components/sellable";
 import { loadCapacityState, packLoadAt, planHorizon } from "@/lib/capacity";
-import { openRoom } from "@/lib/recommend";
+import { openRoom, recommendedProducts } from "@/lib/recommend";
+import { RecommendedProducts } from "@/components/recommended-products";
 import { orderFeasibility, type Feasibility } from "@/lib/feasibility";
 import { loadSettings } from "@/lib/settings";
 import { activeSkus, approvalQueue, listOrderViews, type OrderView } from "@/lib/queries";
@@ -432,5 +433,10 @@ function SellTab({ canCreate, view }: { canCreate: boolean; view: "product" | "c
   const s = loadSettings();
   const packs = ["GLASS", "CAN"].map((pack) => ({ pack, months: Object.fromEntries(months.map((m) => [m, Math.max(0, (s[`pack_capacity.${pack}`] ?? 0) - packLoadAt(state, pack, m))])) }));
   const skus = activeSkus().map((k) => ({ code: k.code, productType: k.productType, blend: k.blend, packFormat: k.packFormat }));
-  return <Sellable view={view} months={months} room={openRoom(months)} packs={packs} skus={skus} canCreate={canCreate} />;
+  return (
+    <>
+      <RecommendedProducts items={recommendedProducts(months)} months={months} canCreate={canCreate} />
+      <Sellable view={view} months={months} room={openRoom(months)} packs={packs} skus={skus} canCreate={canCreate} />
+    </>
+  );
 }

@@ -27,6 +27,9 @@ export type Sku = {
   packFormat: string;
   packSizeKg: number;
   active: boolean;
+  // Set by leadership in Settings: what sales should push, and why.
+  salesPriority?: "HIGH" | "NORMAL" | "LOW";
+  salesNote?: string;
 };
 
 export type Setting = { key: string; value: number; label: string; unit: string; grp: string; sort: number };

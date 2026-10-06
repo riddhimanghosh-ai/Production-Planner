@@ -326,7 +326,14 @@ export function seedStore() {
     { lineId: lineId("FDC"), productType: "FDC", capacityMt: 15 },
   ];
   st.capacityOverrides = [{ lineId: lineId("SD03"), month: M(8), capacityMt: 25, note: "Planned maintenance" }];
-  st.skus = SKUS.map((s) => ({ ...s, id: nextId("skus"), active: true }));
+  // Sales priorities set by leadership (demo): push the products with spare line room and the best margin.
+  const PRIORITY: Record<string, { p: "HIGH" | "LOW"; note: string }> = {
+    "Agglomerated · Pure · Glass jars": { p: "HIGH", note: "Jar line has room from Jan; EU importers ask for it" },
+    "Freeze-dried · Pure · Bulk bags": { p: "HIGH", note: "Best margin per kilo; freeze-drying line under-used" },
+    "Spray-dried · Pure · Bulk bags": { p: "HIGH", note: "Steady volume filler for SD03" },
+    "Spray-dried · Chicory · Cans": { p: "LOW", note: "Can filling is nearly full until March" },
+  };
+  st.skus = SKUS.map((s) => ({ ...s, id: nextId("skus"), active: true, salesPriority: PRIORITY[s.code]?.p ?? "NORMAL", salesNote: PRIORITY[s.code]?.note ?? "" }));
 
   for (const o of ORDERS) {
     const ownerId = userId(o.owner);
